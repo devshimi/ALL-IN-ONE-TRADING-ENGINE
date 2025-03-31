@@ -1,7 +1,7 @@
-# Ultimate Trading App (Real-Time Chart + PnL) - Pro Edition
+# ALL-IN-ONE-TRADING-ENGINE
 
 ## Introduction
-The Ultimate Trading App is designed for professional and advanced traders, offering real-time charting, PnL tracking, market data integration, and algorithmic trading features. The application leverages IBKR for live market data and order management, along with various other APIs for enhanced functionality.
+The All In One Trading Engine is designed for professional and advanced traders, offering real-time charting, PnL tracking, market data integration, and algorithmic trading features. The application leverages IBKR for live market data and order management, along with various other APIs for enhanced functionality.
 
 ## Getting Started
 
@@ -28,44 +28,17 @@ The Ultimate Trading App is designed for professional and advanced traders, offe
 
 ## Features Overview
 
-### Custom Exceptions
-- **ConfigError**: Raised for critical configuration issues.
-- **AuthenticationError**: Raised for authentication failures.
-- **IBKRConnectionError**: Raised for IBKR connection issues.
-- **DatabaseError**: Raised for critical database issues.
-
-### Logger Setup
-- Configures a rotating file logger and console stream handler for detailed logging.
-
-### Encryption
-- Uses `cryptography.fernet` for encrypting sensitive data like configuration files and user credentials.
-
-### Configuration
-- Loads and saves configuration settings securely.
-
-### Authentication
-- Manages user authentication with bcrypt hashing, supporting admin user management.
-
-### Database
-- Integrates SQLite with SQLAlchemy for managing trades and positions.
-
-### Positions Management
-- Tracks open positions, calculates average cost, and realized/unrealized PnL.
-
-### Market Data
-- Fetches historical data from Yahoo Finance and SEC filings, with support for option chain data.
-
-### IBKR Integration
-- Manages IBKR connection, live market data fetching, order placement, and DOM/T&S subscriptions.
-
-### Alert System
-- Manages technical or price-based alerts, triggering user-defined callbacks.
-
-### Backtester
-- Implements a simple SMA-based strategy for backtesting on historical data.
-
-### Real-Time Charting
-- Displays real-time candlestick charts using PyQtGraph.
+- **Custom Exceptions**: For handling critical issues like configuration errors, authentication failures, and database issues.
+- **Logger Setup**: Rotating file logger and console stream handler for detailed logging.
+- **Encryption**: Encrypts sensitive data like configuration files and user credentials.
+- **Configuration and Authentication**: Secure loading and saving of configuration settings and user authentication management.
+- **Database Integration**: Manages trades and positions using SQLite and SQLAlchemy.
+- **Positions Management**: Tracks open positions and calculates average cost and PnL.
+- **Market Data**: Fetches historical data from Yahoo Finance and SEC filings, and supports option chain data.
+- **IBKR Integration**: Manages IBKR connection, live market data, order placement, and DOM/T&S subscriptions.
+- **Alert System**: Technical or price-based alerts with user-defined callbacks.
+- **Backtester**: Implements a simple SMA-based strategy for backtesting on historical data.
+- **Real-Time Charting**: Displays real-time candlestick charts using PyQtGraph.
 
 ### UI Tabs Overview
 - **Market Dashboard**: Real-time candlestick chart for selected symbols.
