@@ -24,8 +24,8 @@ Sections:
   5) Authentication
   6) Database
   7) Positions
-  8) MarketData
-  9) IBKRIntegration
+  8) Market Data
+  9) IBKR Integration
  10) AlertSystem
  11) Backtester
  12) Custom CandlestickItem
@@ -46,7 +46,7 @@ Sections:
 """
 
 # ---------------------------
-# 1) CUSTOM EXCEPTIONS
+# 1) Custom Exceptions
 # ---------------------------
 class ConfigError(Exception):
     """Raised when there's a critical configuration issue."""
@@ -66,7 +66,7 @@ class DatabaseError(Exception):
 
 
 # ---------------------------
-# 2) LOGGER SETUP (Rotating + Console)
+# 2) Logger Setup (Rotating + Console)
 # ---------------------------
 import logging
 import os
@@ -107,7 +107,7 @@ logger = setup_logger()
 
 
 # ---------------------------
-# 3) ENCRYPTION
+# 3) Encryption (Fernet)
 # ---------------------------
 from cryptography.fernet import Fernet
 
@@ -133,7 +133,7 @@ fernet: Fernet = Fernet(FERNET_KEY)
 
 
 # ---------------------------
-# 4) CONFIGURATION
+# 4) Configuration
 # ---------------------------
 import json
 
@@ -185,7 +185,7 @@ config: dict = load_config()
 
 
 # ---------------------------
-# 5) AUTHENTICATION
+# 5) Authentication
 # ---------------------------
 import bcrypt
 from typing import List, Optional
@@ -252,7 +252,7 @@ def verify_password(user: dict, password: str) -> bool:
 
 
 # ---------------------------
-# 6) DATABASE
+# 6) Database
 # ---------------------------
 import sqlalchemy
 from sqlalchemy import create_engine, Column, Integer, Float, String, DateTime
@@ -302,7 +302,7 @@ SessionLocal = init_db()
 
 
 # ---------------------------
-# 7) POSITIONS
+# 7) Positions
 # ---------------------------
 from sqlalchemy.orm.exc import NoResultFound
 
@@ -396,7 +396,7 @@ class PositionsManager:
 
 
 # ---------------------------
-# 8) MARKET DATA 
+# 8) Market Data 
 # ---------------------------
 import requests
 import yfinance as yf
@@ -472,7 +472,7 @@ class MarketDataManager:
 
 
 # ---------------------------
-# 9) IBKR INTEGRATION
+# 9) IBKR Integration
 # ---------------------------
 from ib_insync import IB, Stock, MarketOrder, LimitOrder
 import time
@@ -620,7 +620,7 @@ class IBKRManager(MarketDataInterface):
 
 
 # ---------------------------
-# 10) ALERT SYSTEM
+# 10) Alert System
 # ---------------------------
 class AlertEngine:
     """
@@ -655,7 +655,7 @@ class AlertEngine:
 
 
 # ---------------------------
-# 11) BACKTESTER
+# 11) Backtester
 # ---------------------------
 import numpy as np
 
@@ -713,7 +713,7 @@ class Backtester:
 
 
 # ---------------------------
-# 12) CANDLESTICKS
+# 12) Candlesticks
 # ---------------------------
 from pyqtgraph import GraphicsObject, mkPen, mkBrush, QtGui, QtCore
 from PyQt5.QtCore import QRectF
@@ -769,7 +769,7 @@ class CandlestickItem(GraphicsObject):
 
 
 # ---------------------------
-# 13) CHART DATA
+# 13) Chart Data
 # ---------------------------
 from datetime import datetime
 
@@ -818,7 +818,7 @@ class ChartDataManager:
 
 
 # ---------------------------
-# 14) LOGIN DIALOG
+# 14) Login Dialog
 # ---------------------------
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QFormLayout, QHBoxLayout
 from PyQt5.QtWidgets import QLineEdit, QPushButton, QMessageBox
@@ -886,7 +886,7 @@ class LoginDialog(QDialog):
 
 
 # ---------------------------
-# 15) STRATEGY ENGINE
+# 15) Strategy Engine
 # ---------------------------
 class StrategyEngine:
     """
@@ -908,7 +908,7 @@ class StrategyEngine:
 
 
 # ---------------------------
-# 16) UI TABS
+# 16) UI Tabs
 # ---------------------------
 # 16.1) OrdersTab
 from PyQt5.QtWidgets import QWidget, QVBoxLayout, QTableWidget, QTableWidgetItem, QLabel
@@ -1367,7 +1367,7 @@ class DomTsTab(QWidget):
 
 
 # ---------------------------
-# 17) MAIN WINDOW 
+# 17) Main Window
 # ---------------------------
 from PyQt5.QtWidgets import QMainWindow, QTabWidget
 from PyQt5.QtCore import QThread, pyqtSignal
@@ -1590,7 +1590,7 @@ class MainWindow(QMainWindow):
 
 
 # ---------------------------
-# 18) MAIN() – ENTRY POINT
+# 18) main () – Entry Point
 # ---------------------------
 def main() -> None:
     """
