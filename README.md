@@ -1,7 +1,7 @@
-# Ultimate Pro Trading System
+# ALL IN ONE TRADING ENGINE 
 
 ## Overview
-The Ultimate Pro Trading System is a sophisticated, single-file trading application equipped with a range of features to support the development, testing, and execution of trading strategies. It integrates multiple functionalities, including real-time charting, PnL tracking, IBKR integration, and more, all within a single Python file.
+The ALL In One Trading Engine is a sophisticated, single-file trading application equipped with a range of features to support the development, testing, and execution of trading strategies. It integrates multiple functionalities, including real-time charting, PnL tracking, IBKR integration, and more, all within a single Python file.
 
 ## Features
 - **Real-time Chart & Custom Candlestick**: Visualize market data in real-time with custom candlestick charts.
