@@ -2,56 +2,88 @@
 
 ## Overview
 
-The ALL In One Trading Engine is a versatile and comprehensive trading application designed to support the entire lifecycle of trading strategies, from development and testing to execution. This sophisticated tool is contained within a single Python file, making it easy to deploy and manage. It combines various functionalities like real-time charting, profit and loss tracking, Interactive Brokers (IBKR) integration, and more.
+The ALL IN ONE TRADING ENGINE is a comprehensive trading platform designed for educational and research purposes. It features real-time market data, automated trading strategies, position management, and various analytical tools. The app integrates with Interactive Brokers (IBKR) for live trading and market data, as well as Yahoo Finance for historical data.
 
 ## Features
 
-The engine offers a wide array of features to facilitate effective trading:
+1. **Custom Exceptions**: Defined for handling various critical errors like configuration issues, authentication failures, and database connection problems.
 
-**Real-time Chart & Custom Candlestick**: The application allows traders to visualize market data in real-time using custom candlestick charts. This feature enables users to monitor price movements and market trends as they happen.
+2. **Logger Setup**: Configures a rotating file logger along with a console stream handler for logging application activities.
 
-**PnL Tracking**: Keeping track of positions and profit & loss in real-time is crucial for traders. The engine provides a system to monitor these metrics continuously, offering insights into trading performance.
+3. **Encryption**: Utilizes Fernet encryption for securely storing sensitive information such as configuration and user credentials.
 
-**IBKR Integration**: Direct integration with Interactive Brokers enhances the engine's capabilities by providing access to market data, order placement, Direct Order Management (DOM), and Trader Station (T&S). This seamless connection ensures that traders can execute their strategies efficiently.
+4. **Configuration Management**: Loads, encrypts, and decrypts the configuration settings from a JSON file.
 
-**Alerts System**: The engine includes an alert system that allows users to create and manage technical or price-based alerts. This feature helps traders stay informed about important market movements and potential trading opportunities.
+5. **Authentication**: Manages user authentication using bcrypt for password hashing and verification.
 
-**SEC Filings**: To assist with fundamental analysis, the engine can fetch and display SEC filings for any given symbol. This functionality provides traders with critical information about the companies they are interested in.
+6. **Database Integration**: Supports SQLite for storing trade and position records, using SQLAlchemy for ORM.
 
-**Option Chain**: The application can fetch and display option chain data using Yahoo Finance, making it easier for traders to analyze derivatives and options strategies.
+7. **Positions Management**: Tracks open positions, calculates average costs and realized PnL, and logs positions to the database.
 
-**Backtester**: A built-in backtester allows users to run backtests using a simple SMA-based strategy. This tool helps traders evaluate the performance of their strategies using historical data before applying them in real-time trading.
+8. **Market Data Interface**: Fetches market data from Yahoo Finance and SEC filings, and integrates with IBKR for live data.
 
-**User Authentication**: Security is a primary concern, and the engine includes a secure user authentication system. This ensures that only authorized individuals can access the trading functionalities.
+9. **IBKR Integration**: Manages IBKR connection for real-time market data, placing/canceling orders, and handling events.
 
-**Database Integration**: For those who need to store and retrieve trading data, the engine offers optional database integration. This feature provides a robust solution for managing large volumes of trading data.
+10. **Alert System**: Manages technical or price-based alerts and triggers user-defined callbacks when conditions are met.
 
-**Extensible UI**: The user interface, built with PyQt5, is designed to be extensible and user-friendly. It includes multiple tabs, each dedicated to different aspects of trading, such as orders, bot management, positions, option chains, SEC filings, alerts, backtesting, and DOM/T&S.
+11. **Backtester**: Provides a simple backtesting framework using a moving average cross strategy.
 
-## Getting Started
+12. **Candlestick Visualization**: Custom PyQtGraph item for rendering candlestick charts.
 
-To get started with the ALL In One Trading Engine, you need to ensure your environment meets the prerequisites and follow a few setup steps:
+13. **Chart Data Management**: Maintains rolling candlestick data for real-time updates.
 
-**Prerequisites**: The engine requires Python 3.7 or higher. You can install the necessary packages using the provided requirements file:
+14. **Login Dialog**: Provides a login interface with an option to skip IBKR for offline mode.
 
-```bash
-pip install -r requirements.txt
-```
+15. **Strategy Engine**: Placeholder for advanced trading strategies.
 
-**Configuration**: Make sure you have a `config.json` file in the same directory as the application. If this file does not exist, the application will automatically create a default configuration file. Similarly, ensure you have a `users.json` file for user authentication. If this file is missing, the application will generate it with a default admin user (`username: admin`, `password: admin`).
+16. **UI Tabs**: Various tabs for managing orders, bots, positions, option chains, SEC filings, alerts, backtesting, and DOM & T&S.
 
-**Starting the Application**: Once your environment is set up, you can start the application by running:
+17. **Main Window**: The main application window that integrates all features and functionalities.
 
-```bash
-python ultimate_pro_trading_system.py
-```
+18. **Entry Point**: The main function that launches the login dialog and the main application window.
+
+## Installation
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/yourusername/all-in-one-trading-engine.git
+   cd all-in-one-trading-engine
+   ```
+
+2. Install the required dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+3. Ensure you have PyQt5 installed. If not, install it using:
+   ```bash
+   pip install PyQt5
+   ```
+
+4. Set up your configuration and user files:
+   - `config.json`: Configuration settings for IBKR and API keys.
+   - `users.json`: User credentials for authentication.
+
+5. Run the application:
+   ```bash
+   python main.py
+   ```
 
 ## Usage
 
-Upon starting the application, you will be greeted with a login dialog. You can log in using the default admin credentials or create new users. After logging in, the main window will be displayed, containing multiple tabs that provide access to the various functionalities of the engine.
+- **Login**: Use the login dialog to authenticate or skip IBKR for offline mode.
+- **Tabs**: Navigate through various tabs to manage orders, bots, positions, option chains, SEC filings, alerts, backtesting, and DOM & T&S.
+- **Real-Time Data**: The application fetches real-time market data and updates the charts and positions accordingly.
+- **Alerts**: Set price-based alerts and get notified when conditions are met.
+- **Backtesting**: Run simple moving average cross strategy backtests using historical data.
+
 
 ## Disclaimer
 
-This project is intended for educational and research purposes only. It is not financial advice and should not be construed as an invitation to trade or invest. The author does not guarantee the accuracy, completeness, or profitability of this trading software. Use of this code in live or paper trading environments is at your own risk. Trading financial instruments such as stocks, options, or derivatives involves significant risk of loss and may not be suitable for all investors. You are solely responsible for any decisions or trades you make. Before using this system, consult with a qualified financial advisor and ensure compliance with your local regulations and your broker’s terms of service. The author is not liable for any damages, financial losses, or legal issues resulting from the use of this codebase.
+This project is provided for educational and research purposes only. It is not financial advice, nor an invitation to trade or invest. The author does not guarantee the accuracy, completeness, or profitability of this trading software. Use of this code in live or paper trading environments is at your own risk.
 
-Enjoy exploring the ALL In One Trading Engine and use it as a platform to develop, test, and enhance your trading strategies!
+Trading financial instruments such as stocks, options, or derivatives involves significant risk of loss and may not be suitable for all investors. You are solely responsible for any decisions or trades you make.
+
+Before using this system, consult with a qualified financial advisor and ensure compliance with your local regulations and your broker’s terms of service.
+
+The author is not liable for any damages, financial losses, or legal issues resulting from the use of this codebase.
