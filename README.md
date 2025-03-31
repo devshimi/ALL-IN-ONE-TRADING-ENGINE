@@ -1,89 +1,86 @@
-# ALL IN ONE TRADING ENGINE
+# Ultimate Trading App (Real-Time Chart + PnL) - Pro Edition
 
-## Overview
+## Introduction
+The Ultimate Trading App is designed for professional and advanced traders, offering real-time charting, PnL tracking, market data integration, and algorithmic trading features. The application leverages IBKR for live market data and order management, along with various other APIs for enhanced functionality.
 
-The ALL IN ONE TRADING ENGINE is a comprehensive trading platform designed for educational and research purposes. It features real-time market data, automated trading strategies, position management, and various analytical tools. The app integrates with Interactive Brokers (IBKR) for live trading and market data, as well as Yahoo Finance for historical data.
+## Getting Started
 
-## Features
+### Prerequisites
+- Python 3.8 or higher
+- Required Python packages (listed in `requirements.txt`)
 
-1. **Custom Exceptions**: Defined for handling various critical errors like configuration issues, authentication failures, and database connection problems.
-
-2. **Logger Setup**: Configures a rotating file logger along with a console stream handler for logging application activities.
-
-3. **Encryption**: Utilizes Fernet encryption for securely storing sensitive information such as configuration and user credentials.
-
-4. **Configuration Management**: Loads, encrypts, and decrypts the configuration settings from a JSON file.
-
-5. **Authentication**: Manages user authentication using bcrypt for password hashing and verification.
-
-6. **Database Integration**: Supports SQLite for storing trade and position records, using SQLAlchemy for ORM.
-
-7. **Positions Management**: Tracks open positions, calculates average costs and realized PnL, and logs positions to the database.
-
-8. **Market Data Interface**: Fetches market data from Yahoo Finance and SEC filings, and integrates with IBKR for live data.
-
-9. **IBKR Integration**: Manages IBKR connection for real-time market data, placing/canceling orders, and handling events.
-
-10. **Alert System**: Manages technical or price-based alerts and triggers user-defined callbacks when conditions are met.
-
-11. **Backtester**: Provides a simple backtesting framework using a moving average cross strategy.
-
-12. **Candlestick Visualization**: Custom PyQtGraph item for rendering candlestick charts.
-
-13. **Chart Data Management**: Maintains rolling candlestick data for real-time updates.
-
-14. **Login Dialog**: Provides a login interface with an option to skip IBKR for offline mode.
-
-15. **Strategy Engine**: Placeholder for advanced trading strategies.
-
-16. **UI Tabs**: Various tabs for managing orders, bots, positions, option chains, SEC filings, alerts, backtesting, and DOM & T&S.
-
-17. **Main Window**: The main application window that integrates all features and functionalities.
-
-18. **Entry Point**: The main function that launches the login dialog and the main application window.
-
-## Installation
-
-1. Clone the repository:
-   ```bash
-   git clone https://github.com/yourusername/all-in-one-trading-engine.git
-   cd all-in-one-trading-engine
+### Installation
+1. Clone the repo:
+   ```sh
+   git clone https://github.com/devshimi/ultimate-trading-app.git
+   cd ultimate-trading-app
    ```
-
-2. Install the required dependencies:
-   ```bash
+2. Install the required packages:
+   ```sh
    pip install -r requirements.txt
    ```
 
-3. Ensure you have PyQt5 installed. If not, install it using:
-   ```bash
-   pip install PyQt5
-   ```
-
-4. Set up your configuration and user files:
-   - `config.json`: Configuration settings for IBKR and API keys.
-   - `users.json`: User credentials for authentication.
-
-5. Run the application:
-   ```bash
+### Running the Application
+1. Start the application:
+   ```sh
    python main.py
    ```
 
-## Usage
+## Features Overview
 
-- **Login**: Use the login dialog to authenticate or skip IBKR for offline mode.
-- **Tabs**: Navigate through various tabs to manage orders, bots, positions, option chains, SEC filings, alerts, backtesting, and DOM & T&S.
-- **Real-Time Data**: The application fetches real-time market data and updates the charts and positions accordingly.
-- **Alerts**: Set price-based alerts and get notified when conditions are met.
-- **Backtesting**: Run simple moving average cross strategy backtests using historical data.
+### Custom Exceptions
+- **ConfigError**: Raised for critical configuration issues.
+- **AuthenticationError**: Raised for authentication failures.
+- **IBKRConnectionError**: Raised for IBKR connection issues.
+- **DatabaseError**: Raised for critical database issues.
 
+### Logger Setup
+- Configures a rotating file logger and console stream handler for detailed logging.
+
+### Encryption
+- Uses `cryptography.fernet` for encrypting sensitive data like configuration files and user credentials.
+
+### Configuration
+- Loads and saves configuration settings securely.
+
+### Authentication
+- Manages user authentication with bcrypt hashing, supporting admin user management.
+
+### Database
+- Integrates SQLite with SQLAlchemy for managing trades and positions.
+
+### Positions Management
+- Tracks open positions, calculates average cost, and realized/unrealized PnL.
+
+### Market Data
+- Fetches historical data from Yahoo Finance and SEC filings, with support for option chain data.
+
+### IBKR Integration
+- Manages IBKR connection, live market data fetching, order placement, and DOM/T&S subscriptions.
+
+### Alert System
+- Manages technical or price-based alerts, triggering user-defined callbacks.
+
+### Backtester
+- Implements a simple SMA-based strategy for backtesting on historical data.
+
+### Real-Time Charting
+- Displays real-time candlestick charts using PyQtGraph.
+
+### UI Tabs Overview
+- **Market Dashboard**: Real-time candlestick chart for selected symbols.
+- **Option Chain**: Fetch and display option chain data from Yahoo Finance.
+- **SEC Filings**: Retrieve and display the latest SEC filings for a given symbol.
+- **Alerts**: Set and manage price-based alerts.
+- **Backtest**: Run a simple SMA-based backtest on historical data.
+- **DOM & T&S**: Display Depth of Market and Time & Sales data for a selected symbol (IBKR only).
+- **Orders**: View and manage live orders.
+- **Bots**: Manage algorithmic trading bots.
+- **Positions**: Track open positions and their PnL.
 
 ## Disclaimer
-
-This project is provided for educational and research purposes only. It is not financial advice, nor an invitation to trade or invest. The author does not guarantee the accuracy, completeness, or profitability of this trading software. Use of this code in live or paper trading environments is at your own risk.
-
+This project is provided for educational and research purposes only. It is not financial advice, nor an invitation to trade or invest.
+The author does not guarantee the accuracy, completeness, or profitability of this trading software. Use of this code in live or paper trading environments is at your own risk.
 Trading financial instruments such as stocks, options, or derivatives involves significant risk of loss and may not be suitable for all investors. You are solely responsible for any decisions or trades you make.
-
 Before using this system, consult with a qualified financial advisor and ensure compliance with your local regulations and your broker’s terms of service.
-
 The author is not liable for any damages, financial losses, or legal issues resulting from the use of this codebase.
