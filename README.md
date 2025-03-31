@@ -15,10 +15,7 @@ The All In One Trading Engine is designed for professional and advanced traders,
    git clone https://github.com/devshimi/ultimate-trading-app.git
    cd ultimate-trading-app
    ```
-2. Install the required libraries:
-   ```sh
-   pip install -r requirements.txt
-   ```
+2. Install the required libraries
 
 ### Running the Application
 1. Start the application:
