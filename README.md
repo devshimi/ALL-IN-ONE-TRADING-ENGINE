@@ -1,6 +1,5 @@
 # ALL IN ONE TRADING ENGINE
 
-## Introduction
 The All In One Trading Engine is designed to support a wide range of advanced trading strategies. With features like real-time charting, profit and loss (PnL) tracking, market data integration, and algorithmic trading, it provides a powerful platform for managing and optimizing trading strategies. The system integrates with Interactive Brokers (IBKR) for live market data and order management, making it adaptable for both individual traders and financial professionals seeking to enhance their trading operations.
 ## Getting Started
 
