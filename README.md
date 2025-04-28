@@ -57,8 +57,9 @@ cargo run
 - **Positions**: Tracks open positions in your account, showing current holdings, quantity, and PnL.
 
 ## Disclaimer
-# This project is provided for educational and research purposes only. It is not financial advice, nor an invitation to trade or invest.
-# The author does not guarantee the accuracy, completeness, or profitability of this trading software. Use of this code in live or paper trading environments is at your own risk.
-# Trading financial instruments such as stocks, options, or derivatives involves significant risk of loss and may not be suitable for all investors. You are solely responsible for any decisions or trades you make.
-# Before using this system, consult with a qualified financial advisor and ensure compliance with your local regulations and your broker’s terms of service.
-# The author is not liable for any damages, financial losses, or legal issues resulting from the use of this codebase.
+
+This project is provided for educational and research purposes only. It is not financial advice, nor an invitation to trade or invest.
+The author does not guarantee the accuracy, completeness, or profitability of this trading system. Use of this code in live or paper trading environments is at your own risk.
+Trading financial instruments such as stocks, options, or derivatives involves significant risk of loss and may not be suitable for all investors.
+You are solely responsible for any decisions or trades you make. Before using this system, consult with a qualified financial advisor and ensure compliance with your local regulations and your broker’s terms of service.
+The author is not liable for any damages, financial losses, or legal issues resulting from the use of this codebase.
