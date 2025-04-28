@@ -51,7 +51,7 @@ cargo run
 - **Backtest**: Run a backtest using historical data with strategies like SMA (Simple Moving Average).
 - **DOM & T&S**: Displays Depth of Market and Time & Sales data for symbols, directly integrated with IBKR.
 - **Orders**: Manage and track live orders, including placing, canceling, and updating orders.
-- **Bots**: Manage and configure algorithmic trading bots for automated trading strategies.
+- **ALOs**: Manage and configure algorithmic trading systems for automated trading strategies.
 - **Positions**: Tracks open positions in your account, showing current holdings, quantity, and PnL.
 
 ## Disclaimer
