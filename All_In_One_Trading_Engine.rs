@@ -1,59 +1,62 @@
 // --- Imports and Dependencies ---
 // Druid GUI and widgets
 use druid::{
-    AppLauncher, Data, Env, Lens, Widget, WidgetExt, WindowDesc, Color, LocalizedString,
+    AppLauncher, Data, Lens, Widget, WidgetExt, WindowDesc, Color, LocalizedString,
     widget::{Flex, Label, Button, TextBox, List, Tabs, TabsPolicy, ViewSwitcher, Checkbox, RadioGroup, SizedBox, Scroll, Either, Container, Split, Controller, Painter, ComboBox, ProgressBar, Tooltip},
-}; // GUI framework and widgets
-use druid::im::Vector; // Immutable vector for app state
-use std::sync::{Arc, Mutex}; // Thread-safe reference counting and mutex for IBKR state
-use chrono::{DateTime, Utc}; // Date/time handling
-use std::sync::Arc; // For thread-safe reference counting
-use tokio::sync::mpsc; // For async multi-producer, single-consumer channels
-use tokio::runtime::Runtime; // For creating a Tokio async runtime
-
-// Error Handling
-use thiserror::Error; // Error derive macro
-use std::io; // IO errors
-use std::fmt; // Formatting
-use std::result::Result as StdResult; // Result alias
-use bcrypt::{hash, verify, DEFAULT_COST};// Password hashing and verification using bcrypt
-// Logging
-use log::{info, warn, error, debug, trace, LevelFilter}; // Logging macros
-use simplelog::{ // Logging framework for flexible log output
-    ColorChoice,// Controls color output in terminal logs
-    CombinedLogger,// Allows combining multiple loggers (e.g., file + terminal)
-    ConfigBuilder,// Builder for custom log configuration
-    TermLogger,// Logger for terminal output
-    TerminalMode,// Terminal output mode (e.g., Mixed, Stdout, Stderr)
-    WriteLogger,// Logger for writing logs to a file
-    ThreadLogMode,// Controls thread info in logs
-    LevelPadding,// Padding for log level display
-    Record,// Represents a log record
-    Config,// Log configuration struct
+    AppDelegate, DelegateCtx, Handled, Selector, Command, Target,
 };
-use chrono::Local; // For getting the local time (used in log timestamps)
 
-use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}}; // Thread-safe primitives: Arc/Mutex for shared state, AtomicBool for atomic flags
-use std::collections::HashMap; // HashMap for key-value storage
-use std::time::{Duration, Instant}; // Duration/Instant for timing and measuring elapsed time
+// Concurrency and Async Primitives 
+use druid::im::Vector;// Immutable vector for app state
+use std::sync::{Arc, Mutex}; // Shared state and thread safety
+use chrono::{DateTime, Utc}; // Date/time utilities
+use tokio::sync::mpsc; // Async multi-producer, single-consumer channels
+use tokio::runtime::Runtime; // Tokio async runtime for background tasks
+
+// Error Handling and Utilities 
+use thiserror::Error; // Derive macro for custom error types
+use std::io; // IO error types
+use std::fmt; // Formatting traits
+use std::result::Result as StdResult; // Standard Result alias
+use bcrypt::{hash, verify, DEFAULT_COST}; // Password hashing/verification
+
+// Logging Frameworks 
+use log::{info, warn, error, debug, trace, LevelFilter}; // Logging macros
+use simplelog::{ // Flexible logging to terminal and file
+    ColorChoice, // Terminal color output
+    CombinedLogger, // Combine multiple loggers
+    ConfigBuilder, // Custom log config builder
+    TermLogger, // Terminal logger
+    TerminalMode, // Terminal output mode
+    WriteLogger, // File logger
+    ThreadLogMode, // Thread info in logs
+    LevelPadding, // Padding for log level
+    Record, // Log record struct
+    Config, // Log config struct
+};
+use chrono::Local; // Local time for log timestamps
+
+// Additional Concurrency, Collections, and Timing 
+use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}}; // Atomic flags for shutdown, etc.
+use std::collections::HashMap; // Key-value storage
+use std::time::{Duration, Instant}; // Time measurement
 use std::fmt; // Formatting traits (Display, Debug, etc.)
-use std::io; // IO traits and types (e.g., for file operations)
+use std::io; // IO traits and types
 use std::result::Result as StdResult; // Alias for std::result::Result
 
-// The following simplelog import is redundant (already imported above), but left for clarity
-use simplelog::{ // Logging framework (see above for details)
+// Redundant Imports 
+use simplelog::{ 
     ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode, WriteLogger,
     ThreadLogMode, LevelPadding, Record, Config,
 };
+use chrono::Local; // 
+use std::fs::File; // File operations 
+use std::io::Write; // For writing logs/files
+use tokio::sync::{mpsc, broadcast, oneshot, RwLock}; // Async channels and RwLock for state
+use tokio::task; // Async task spawning
+use tokio::time::sleep; // Async sleep/delay
 
-use chrono::Local; // Redundant import (already imported above), but sometimes needed for macro hygiene
-use std::fs::File; // For file operations (e.g., log file output)
-use std::io::Write; // For writing to files or streams
-use tokio::sync::{mpsc, broadcast, oneshot, RwLock}; // Tokio async channels and RwLock for async communication and state
-use tokio::task; // For spawning async tasks
-use tokio::time::sleep; // For async sleeping/delays
-
-// IBKR client imports
+// IBKR Client Integration 
 use ibkr_client::{
     TwsClient, TwsClientConfig, TwsError,
     contract::Contract,
@@ -64,24 +67,35 @@ use ibkr_client::{
 /// Centralized, thread-safe IBKR state for the app (connection, login, account, error, etc.)
 #[derive(Clone, Data, Lens)]
 pub struct IbkrState {
-    pub is_connected: bool,
-    pub is_logged_in: bool,
-    pub host: String,
-    pub port: u16,
-    pub client_id: i32,
-    pub error: Option<String>,
-    pub account: Option<String>,
-    pub last_event: Option<String>,
+    pub is_connected: bool, // True if connected to IBKR
+    pub is_logged_in: bool, // True if authenticated
+    pub host: String, // IBKR host address
+    pub port: u16, // IBKR port
+    pub client_id: i32, // IBKR client ID
+    pub error: Option<String>, // Last error message
+    pub account: Option<String>, // Account code
+    pub last_event: Option<String>, // Last event description
     #[data(ignore)]
-    pub client: Option<Arc<Mutex<TwsClient>>>, // Thread-safe client handle
+    pub client: Option<Arc<Mutex<TwsClient>>>, // Thread-safe IBKR client handle
     #[data(ignore)]
-    pub event_tx: Option<broadcast::Sender<IbkrEvent>>, // For event-driven UI updates
+    pub event_tx: Option<broadcast::Sender<IbkrEvent>>, // Channel for event-driven UI updates
 }
+
+// Global AppState Arc for background threads 
 use std::thread;
 use std::sync::{Arc, Mutex};
 use once_cell::sync::Lazy;
-
 static APP_STATE_ARC: Lazy<Arc<Mutex<AppState>>> = Lazy::new(|| Arc::new(Mutex::new(AppState::new())));
+
+/// Application context: Dependency injection container for services and shared state
+pub struct AppContext {
+    pub services: Arc<ServiceContainer>,        // All DI services 
+    pub user_session: Option<UserSession>,      // Currently logged-in user session 
+    pub config: AppConfig,                      // Application-wide configuration
+    pub logger: Arc<dyn Logger>,                // Centralized logger 
+    pub shared_state: Arc<Mutex<SharedState>>,  // Global mutable state (UI, background tasks, etc.)
+    pub cache: Arc<Mutex<Cache>>,               // Optional: cache for fast lookups
+}
 
 impl Default for IbkrState {
     fn default() -> Self {
@@ -100,7 +114,9 @@ impl Default for IbkrState {
     }
 }
 
-/// Advanced, extensible error type for the entire application
+// Error Handling 
+
+/// Unified, extensible error type for the entire application (for robust error handling)
 #[derive(Error, Debug)]
 pub enum AppError {
     #[error("Configuration error: {0}")]
@@ -129,9 +145,10 @@ pub enum AppError {
     Other(String),
 }
 
+// App-wide Result type alias
 pub type Result<T> = StdResult<T, AppError>;
 
-/// Advanced, structured log format: timestamp, level, thread, file, line, target, message
+// Custom log format: timestamp, level, thread, file, line, target, message
 fn advanced_log_format(
     w: &mut dyn Write,
     record: &Record<'_>,
@@ -152,7 +169,7 @@ fn advanced_log_format(
     )
 }
 
-/// Setup advanced logger: terminal, file, full context, thread-aware
+// Initialize advanced logger: logs to terminal and file, includes thread/file info
 pub fn setup_logger(log_level: LevelFilter) -> Result<()> {
     let config = ConfigBuilder::new()
         .set_time_to_local(true)
@@ -185,11 +202,12 @@ pub fn setup_logger(log_level: LevelFilter) -> Result<()> {
 
 // IBKR Connection Manager: async, event-driven, auto-reconnect, error-resilient 
 pub struct IbkrConnectionManager {
-    pub state: Arc<RwLock<IbkrState>>,
-    pub shutdown: Arc<AtomicBool>,
+    pub state: Arc<RwLock<IbkrState>>, // Shared IBKR state
+    pub shutdown: Arc<AtomicBool>, // Shutdown flag for graceful exit
 }
 
 impl IbkrConnectionManager {
+    /// Create a new connection manager with shared state
     pub fn new(state: Arc<RwLock<IbkrState>>) -> Self {
         Self {
             state,
@@ -213,6 +231,7 @@ impl IbkrConnectionManager {
                 break;
             }
 
+            // Get connection parameters from state
             let (host, port, client_id) = {
                 let state = self.state.read().await;
                 (state.host.clone(), state.port, state.client_id)
@@ -244,7 +263,7 @@ impl IbkrConnectionManager {
                         state.event_tx = Some(event_tx.clone());
                     }
 
-                    // Spawn event processing task
+                    // Spawn event processing task (handles incoming IBKR events)
                     let state_clone = self.state.clone();
                     let shutdown_clone = self.shutdown.clone();
                     let client_clone = client_arc.clone();
@@ -257,7 +276,7 @@ impl IbkrConnectionManager {
                             if let Err(e) = event_tx.send(event.clone()) {
                                 error!("Failed to broadcast IBKR event: {:?}", e);
                             }
-                            // Optionally, process important events here for logging or state
+                            // Handle important events for logging/state
                             match &event {
                                 IbkrEvent::Error { code, message } => {
                                     error!("IBKR Error {}: {}", code, message);
@@ -284,7 +303,7 @@ impl IbkrConnectionManager {
                         match &event {
                             IbkrEvent::AccountUpdate { account, key, value, .. } => {
                                 state.last_event = Some(format!("AccountUpdate: {} {}={}", account, key, value));
-                                // Update account info, balances, etc. as needed
+                                // Update account info, balances, etc.
                             }
                             IbkrEvent::OrderStatus { order_id, status, filled, remaining, avg_fill_price, .. } => {
                                 state.last_event = Some(format!(
@@ -313,7 +332,7 @@ impl IbkrConnectionManager {
                                 error!("IBKR Error {}: {}", code, message);
                             }
                             _ => {
-                                // For all other events, optionally log or update state
+                                // Fallback: log or update state for other events
                                 state.last_event = Some(format!("IBKR Event: {:?}", event));
                             }
                         }
@@ -357,8 +376,9 @@ use ring::aead; // Symmetric encryption
 use ring::rand::{SystemRandom, SecureRandom}; // Random for nonce
 use base64::{encode as b64encode, decode as b64decode}; // Base64 for key/ciphertext
 
+/// Simple symmetric encryptor for secure storage (key from env)
 pub struct Encryptor {
-    key: Vec<u8>, // Symmetric key
+    key: Vec<u8>, // Symmetric key bytes
 }
 
 impl Encryptor {
@@ -369,7 +389,7 @@ impl Encryptor {
         let key_bytes = b64decode(&key).map_err(|_| AppError::EncryptionError("Invalid base64 key".into()))?;
         Ok(Self { key: key_bytes })
     }
-    // Encrypt plaintext bytes, return base64 ciphertext
+    /// Encrypt plaintext bytes, return base64 ciphertext
     pub fn encrypt(&self, plaintext: &[u8]) -> Result<String> {
         let sealing_key = aead::LessSafeKey::new(aead::UnboundKey::new(&aead::AES_256_GCM, &self.key)
             .map_err(|_| AppError::EncryptionError("Invalid key".into()))?);
@@ -463,63 +483,63 @@ pub struct AppState {
 // Login form 
 #[derive(Clone, Data, Lens)]
 pub struct LoginState {
-    pub username: String,
-    pub password: String,
-    pub error: Option<String>,
+    pub username: String, // Username input
+    pub password: String, // Password input
+    pub error: Option<String>, // Error message
 }
 
 //  Dashboard state (PnL chart, market feed) 
 #[derive(Clone, Data, Lens)]
 pub struct DashboardState {
-    pub pnl_history: Vector<PnLPoint>,
-    pub market_feed: Vector<MarketFeedItem>,
+    pub pnl_history: Vector<PnLPoint>, // Historical PnL points for chart
+    pub market_feed: Vector<MarketFeedItem>, // Live market feed items
 }
 
 // Positions tab state 
 #[derive(Clone, Data, Lens)]
 pub struct PositionsState {
-    pub positions: Vector<Position>,
-    pub filter: String,
+    pub positions: Vector<Position>, // List of positions
+    pub filter: String, // Symbol filter
 }
 
 // Trades tab 
 #[derive(Clone, Data, Lens)]
 pub struct TradesState {
-    pub trades: Vector<Trade>,
-    pub filter: String,
+    pub trades: Vector<Trade>,// List of trades
+    pub filter: String,// Filter string
 }
 
 //  Settings tab  
 #[derive(Clone, Data, Lens)]
 pub struct SettingsState {
-    pub api_key: String,
-    pub log_level: String,
-    pub log_enabled: bool,
+    pub api_key: String, // API key for external services
+    pub log_level: String, // Log level (debug/info/warn/error)
+    pub log_enabled: bool, // Enable/disable logging
 }
 
-// User and roles -
+// User and roles 
 #[derive(Clone, Data, Lens)]
 pub struct User {
-    pub username: String,
-    pub role: UserRole,
-    pub password_hash: Option<String>, // For bcrypt
+    pub username: String, // Username
+    pub role: UserRole, // User role (RBAC)
+    pub password_hash: Option<String>, // Password hash (bcrypt)
 }
 
 #[derive(Clone, Data, PartialEq, Eq)]
 pub enum UserRole {
-    Admin,      // Full access
-    Trader,     // Can trade, edit algos
-    ReadOnly,   // View only
-    Analyst,    // Can view logs, edit algos
-    Unknown,    // No permissions
+    Admin, // Full access
+    Trader, // Can trade, edit algos
+    ReadOnly, // View only
+    Analyst, // Can view logs, edit algos
+    Unknown, // No permissions
 }
 
-// IDE/editor 
+// IDE editor 
 #[derive(Clone, Data, Lens)]
 pub struct IdeState {
-    pub files: Vector<IdeFile>, // Open files
+    pub files: Vector<IdeFile>, // Open files in the editor
     pub current_file: usize, // Index of current file
-    pub console_output: String, // Output/print/debug
+    pub console_output: String,  // Output/print/debug
     pub is_running: bool, // Algorithm running
     pub is_paused: bool, // Algorithm paused
     pub breakpoints: Vector<usize>, // Breakpoint lines
@@ -531,20 +551,20 @@ pub struct IdeState {
 // File in IDE 
 #[derive(Clone, Data, Lens)]
 pub struct IdeFile {
-    pub name: String,
-    pub content: String,
-    pub path: Option<String>,
+    pub name: String, // File name
+    pub content: String, // File content
+    pub path: Option<String>, // File path (if saved)
     pub is_dirty: bool, // Unsaved changes
-    pub error_lines: Vector<usize>,
-    pub language: String, // Syntax highlighting
-    pub editor_state: druid_code_editor::EditorState,
+    pub error_lines: Vector<usize>, // Error line numbers
+    pub language: String, // Syntax highlighting language
+    pub editor_state: druid_code_editor::EditorState, // Editor state (cursor, etc.)
 }
 
 // Variable watch (debugger)
 #[derive(Clone, Data, Lens)]
 pub struct VariableWatch {
-    pub name: String,
-    pub value: String,
+    pub name: String, // Variable name
+    pub value: String, // Current value
 }
 
 impl Default for IdeState {
@@ -566,13 +586,13 @@ impl Default for IdeState {
 // Trading accounts  
 #[derive(Clone, Data, Lens)]
 pub struct TradingAccountState {
-    pub name: String,
-    pub strategy: String,
-    pub execution_rules: String,
-    pub positions: Vector<Position>,
-    pub trades: Vector<Trade>,
-    pub balance: f64,
-    pub is_active: bool,
+    pub name: String, // Account name
+    pub strategy: String, // Strategy name
+    pub execution_rules: String, // Execution rules
+    pub positions: Vector<Position>,  // Positions in this account
+    pub trades: Vector<Trade>, // Trades in this account
+    pub balance: f64, // Account balance
+    pub is_active: bool, // Is account active
 }
 
 impl Default for TradingAccountState {
@@ -593,15 +613,15 @@ impl Default for TradingAccountState {
 
 #[derive(Clone, Data, Lens)]
 pub struct BacktestingState {
-    pub is_running: bool,
-    pub progress: f64,
-    pub selected_algorithm: Option<String>,
-    pub selected_account: usize,
-    pub start_date: String,
-    pub end_date: String,
-    pub result: Option<BacktestResult>,
-    pub error: Option<String>,
-    pub selected_strategy: String, 
+    pub is_running: bool, // Is backtest running
+    pub progress: f64, // Progress (0.0-1.0)
+    pub selected_algorithm: Option<String>, // Selected algorithm name
+    pub selected_account: usize, // Selected account index
+    pub start_date: String, // Backtest start date
+    pub end_date: String, // Backtest end date
+    pub result: Option<BacktestResult>, // Backtest result
+    pub error: Option<String>, // Error message
+    pub selected_strategy: String, // Selected strategy
 }
 
 impl Default for BacktestingState {
@@ -623,119 +643,119 @@ impl Default for BacktestingState {
 // Backtest result 
 #[derive(Clone, Data, Lens)]
 pub struct BacktestResult {
-    pub pnl_history: Vector<PnLPoint>,
-    pub trades: Vector<Trade>,
-    pub summary: String,
-    pub sharpe_ratio: Option<f64>,
-    pub max_drawdown: Option<f64>,
+    pub pnl_history: Vector<PnLPoint>, // PnL points for chart
+    pub trades: Vector<Trade>, // Trades executed
+    pub summary: String, // Summary string
+    pub sharpe_ratio: Option<f64>, // Sharpe ratio
+    pub max_drawdown: Option<f64>, // Max drawdown
 }
 
 // Alert, Bot, Order, OptionChain, DOM, T&S, SEC Filing 
 #[derive(Clone, Data, Lens)]
 pub struct Alert {
-    pub id: usize,
-    pub symbol: String,
-    pub condition: String,
-    pub triggered: bool,
-    pub last_triggered: Option<String>,
+    pub id: usize,  // Alert ID
+    pub symbol: String, // Symbol
+    pub condition: String, // Trigger condition
+    pub triggered: bool, // Was triggered
+    pub last_triggered: Option<String>, // Last triggered time
 }
 
 #[derive(Clone, Data, Lens)]
 pub struct BotState {
-    pub name: String,
-    pub is_running: bool,
-    pub strategy: String,
-    pub log: String,
-    pub config: String, 
+    pub name: String, // Bot name
+    pub is_running: bool, // Is bot running
+    pub strategy: String, // Strategy name
+    pub log: String, // Bot log
+    pub config: String, // Bot config
 }
 
 #[derive(Clone, Data, Lens)]
 pub struct Order {
-    pub id: usize,
-    pub symbol: String,
-    pub price: f64,
-    pub quantity: i32,
-    pub status: String,
-    pub order_type: String,
-    pub date: String,
+    pub id: usize, // Order ID
+    pub symbol: String, // Symbol
+    pub price: f64, // Price
+    pub quantity: i32, // Quantity
+    pub status: String, // Status
+    pub order_type: String, // Order type
+    pub date: String, // Date
 }
 
 #[derive(Clone, Data, Lens)]
 pub struct OptionChain {
-    pub symbol: String,
-    pub expirations: Vector<String>,
-    pub strikes: Vector<f64>,
-    pub calls: Vector<OptionContract>,
-    pub puts: Vector<OptionContract>,
+    pub symbol: String, // Underlying symbol
+    pub expirations: Vector<String>, // Expiration dates
+    pub strikes: Vector<f64>, // Strike prices
+    pub calls: Vector<OptionContract>, // Call contracts
+    pub puts: Vector<OptionContract>, // Put contracts
 }
 
 #[derive(Clone, Data, Lens)]
 pub struct OptionContract {
-    pub strike: f64,
-    pub expiration: String,
-    pub bid: f64,
-    pub ask: f64,
-    pub iv: f64,
-    pub volume: i32,
-    pub open_interest: i32,
+    pub strike: f64, // Strike price
+    pub expiration: String, // Expiration date
+    pub bid: f64, // Bid price
+    pub ask: f64,// Ask price
+    pub iv: f64, // Implied volatility
+    pub volume: i32, // Volume
+    pub open_interest: i32, // Open interest
     pub contract_type: String, // "call" or "put"
 }
 
 #[derive(Clone, Data, Lens)]
 pub struct DomData {
-    pub symbol: String,
-    pub bids: Vector<DomLevel>,
-    pub asks: Vector<DomLevel>,
+    pub symbol: String, // Symbol
+    pub bids: Vector<DomLevel>, // Bid levels
+    pub asks: Vector<DomLevel>, // Ask levels
 }
 
 #[derive(Clone, Data, Lens)]
 pub struct DomLevel {
-    pub price: f64,
-    pub size: i32,
+    pub price: f64, // Price level
+    pub size: i32, // Size at level
 }
 
 #[derive(Clone, Data, Lens)]
 pub struct TAndSData {
-    pub symbol: String,
-    pub trades: Vector<TimeAndSales>,
+    pub symbol: String, // Symbol
+    pub trades: Vector<TimeAndSales>, // Time & Sales records
 }
 
 #[derive(Clone, Data, Lens)]
 pub struct TimeAndSales {
-    pub price: f64,
-    pub size: i32,
-    pub time: String,
-    pub side: String,
+    pub price: f64, // Trade price
+    pub size: i32, // Trade size
+    pub time: String, // Time of trade
+    pub side: String, // Buy/Sell
 }
 
 #[derive(Clone, Data, Lens)]
 pub struct SecFiling {
-    pub symbol: String,
-    pub filing_type: String,
-    pub date: String,
-    pub url: String,
-    pub description: String,
+    pub symbol: String, // Symbol
+    pub filing_type: String, // Filing type (e.g., 10-K)
+    pub date: String, // Filing date
+    pub url: String, // Filing URL
+    pub description: String, // Description
 }
 
 // Position, Trade, MarketFeed, PnLPoint 
 #[derive(Clone, Data, Lens)]
 pub struct Position {
-    pub symbol: String,
-    pub quantity: i32,
-    pub average_price: f64,
-    pub realized_pnl: f64,
-    pub unrealized_pnl: f64,
-    pub last_traded_price: f64,
+    pub symbol: String, // Symbol
+    pub quantity: i32, // Quantity held
+    pub average_price: f64, // Average entry price
+    pub realized_pnl: f64, // Realized PnL
+    pub unrealized_pnl: f64, // Unrealized PnL
+    pub last_traded_price: f64, // Last traded price
 }
 
 #[derive(Clone, Data, Lens)]
 pub struct Trade {
-    pub symbol: String,
-    pub price: f64,
-    pub quantity: i32,
-    pub action: TradeAction,
-    pub pnl: f64,
-    pub date: String,
+    pub symbol: String, // Symbol
+    pub price: f64, // Trade price
+    pub quantity: i32, // Quantity
+    pub action: TradeAction, // Buy/Sell
+    pub pnl: f64, // PnL for this trade
+    pub date: String, // Trade date
 }
 
 #[derive(Clone, Data, PartialEq, Eq, Lens)]
@@ -746,39 +766,46 @@ pub enum TradeAction {
 
 #[derive(Clone, Data, Lens)]
 pub struct MarketFeedItem {
-    pub symbol: String,
-    pub price: f64,
-    pub change: f64,
+    pub symbol: String, // Symbol
+    pub price: f64, // Last price
+    pub change: f64, // % change
 }
 
 #[derive(Clone, Data, Lens)]
 pub struct PnLPoint {
-    pub time: f64, // For charting, use f64 for time axis
-    pub pnl: f64,
-    pub value: f64, // For compatibility
+    pub time: f64, // Time (for charting)
+    pub pnl: f64, // PnL value
+    pub value: f64, // (Optional, for compatibility)
 }
 
 // RBAC (Role-Based Access Control)
 
 impl UserRole {
+    /// Manage users (admin only)
     pub fn can_manage_users(&self) -> bool {
         matches!(self, UserRole::Admin)
     }
+    /// Trade (admin or trader)
     pub fn can_trade(&self) -> bool {
         matches!(self, UserRole::Admin | UserRole::Trader)
     }
+    /// View positions (all except unknown)
     pub fn can_view_positions(&self) -> bool {
         !matches!(self, UserRole::Unknown)
     }
+    /// View logs (admin or analyst)
     pub fn can_view_logs(&self) -> bool {
         matches!(self, UserRole::Admin | UserRole::Analyst)
     }
+    /// Edit algorithms (admin, trader, analyst)
     pub fn can_edit_algorithms(&self) -> bool {
         matches!(self, UserRole::Admin | UserRole::Trader | UserRole::Analyst)
     }
+    /// Manage bots (admin or trader)
     pub fn can_manage_bots(&self) -> bool {
         matches!(self, UserRole::Admin | UserRole::Trader)
     }
+    /// View DOM (admin or trader)
     pub fn can_view_dom(&self) -> bool {
         matches!(self, UserRole::Admin | UserRole::Trader)
     }
@@ -1593,7 +1620,6 @@ fn debugger_controls() -> impl Widget<AppState> {
 
 // Console Output UI
 
-
 fn console_output_ui() -> impl Widget<AppState> {
     Scroll::new(
         Label::dynamic(|data: &AppState, _| data.ide.console_output.clone())
@@ -1900,55 +1926,90 @@ fn backtesting_ui() -> impl Widget<AppState> {
         .with_child(
             Flex::row()
                 .with_child(Button::new("Run Backtest").on_click(|_ctx, data: &mut AppState, _| {
-                    // Start backtest (dummy result for demo)
-                    data.backtesting.is_running = true;
-                    data.backtesting.progress = 0.0;
-                    data.backtesting.result = None;
-                    data.backtesting.error = None;
-                    // Robust architecture: delegate backtest execution to a dedicated engine/service layer.
-                    // This closure synchronously calls BacktestEngine, which encapsulates all backtest logic.
-                    // In production, this should be run asynchronously (off the UI thread) using a thread pool or async runtime.
-                    // Here, we show a synchronous call for demonstration, but the engine is separated for testability and maintainability.
-                    let algorithm = data.backtesting.selected_algorithm.clone();
-                    let account = data.backtesting.selected_account.clone();
-                    let start_date = data.backtesting.start_date.clone();
-                    let end_date = data.backtesting.end_date.clone();
-                    let accounts = data.accounts.clone();
+                // Real backtesting architecture: spawn async task, update UI via progress callback
 
-                    // Call the backtest engine 
-                    match BacktestEngine::run(
+                use druid::{Selector, Target};
+
+                // Define selectors for UI updates
+                const BACKTEST_PROGRESS: Selector<f64> = Selector::new("backtest.progress");
+                const BACKTEST_RESULT: Selector<Result<BacktestResult, String>> = Selector::new("backtest.result");
+
+                // Mark as running and reset state
+                data.backtesting.is_running = true;
+                data.backtesting.progress = 0.0;
+                data.backtesting.result = None;
+                data.backtesting.error = None;
+
+                // Clone necessary data for async move
+                let backtest_service = data.backtest_service.clone();
+                let algorithm = data.backtesting.selected_algorithm.clone();
+                let account = data.backtesting.selected_account.clone();
+                let start_date = data.backtesting.start_date.clone();
+                let end_date = data.backtesting.end_date.clone();
+                let accounts = data.accounts.clone();
+                let event_sink = ctx.get_external_handle();
+
+                // Spawn the backtest in a background thread or async task
+                std::thread::spawn(move || {
+                    // Progress callback closure
+                    let mut progress_callback = |progress: f64| {
+                        // Send progress update to UI
+                        let _ = event_sink.submit_command(BACKTEST_PROGRESS, progress, Target::Auto);
+                    };
+
+                    // Run the backtest
+                    let result = backtest_service.run_backtest(
                         &algorithm,
                         &account,
                         &start_date,
                         &end_date,
                         &accounts,
-                    ) {
-                        Ok(result) => {
-                            data.backtesting.result = Some(result);
-                            data.backtesting.error = None;
-                        }
-                        Err(e) => {
-                            data.backtesting.result = None;
-                            data.backtesting.error = Some(e);
-                        }
-                    }
-                    data.backtesting.is_running = false;
-                    data.backtesting.progress = 1.0;
+                        Some(&mut progress_callback),
+                    );
 
-                    // Professional Service Layer: Real Backtest Engine Architecture
+                    // Send result to UI
+                    let _ = event_sink.submit_command(BACKTEST_RESULT, result, Target::Auto);
+                });
 
-                    // Service trait for backtesting, allowing for dependency injection and testability
-                    pub trait BacktestService: Send + Sync {
-                        fn run_backtest(
-                            &self,
-                            algorithm: &str,
-                            account: &str,
-                            start_date: &str,
-                            end_date: &str,
-                            accounts: &[Account],
-                            progress_callback: Option<&mut dyn FnMut(f64)>,
-                        ) -> Result<BacktestResult, String>;
+                // Async Command Handling for Backtest UI Updates
+                pub const BACKTEST_PROGRESS: Selector<f64> = Selector::new("backtest.progress");
+                pub const BACKTEST_RESULT: Selector<Result<BacktestResult, String>> = Selector::new("backtest.result");
+
+                pub struct Delegate;
+
+                impl AppDelegate<AppState> for Delegate {
+                    fn command(
+                        &mut self,
+                        ctx: &mut DelegateCtx,
+                        target: Target,
+                        cmd: &Command,
+                        data: &mut AppState,
+                        _env: &Env,
+                    ) -> Handled {
+                        if let Some(progress) = cmd.get(BACKTEST_PROGRESS) {
+                            data.backtesting.progress = *progress;
+                            ctx.request_update();
+                            return Handled::Yes;
+                        }
+                        if let Some(result) = cmd.get(BACKTEST_RESULT) {
+                            data.backtesting.is_running = false;
+                            data.backtesting.progress = 1.0;
+                            match result {
+                                Ok(res) => {
+                                    data.backtesting.result = Some(res.clone());
+                                    data.backtesting.error = None;
+                                }
+                                Err(e) => {
+                                    data.backtesting.result = None;
+                                    data.backtesting.error = Some(e.clone());
+                                }
+                            }
+                            ctx.request_update();
+                            return Handled::Yes;
+                        }
+                        Handled::No
                     }
+                }
 
                     // Concrete implementation of the BacktestService
                     pub struct BacktestEngine;
@@ -1995,7 +2056,53 @@ fn backtesting_ui() -> impl Widget<AppState> {
                         }
                     }
 
-                    // Singleton instance for the service (could be replaced with DI in larger apps)
+                    // Advanced dependency injection (DI) for the backtest service using trait objects and a DI container pattern.
+
+                    use std::sync::Arc;
+
+                    // Define a trait for the service (already shown above, but for clarity)
+                    pub trait BacktestService: Send + Sync {
+                        fn run_backtest(
+                            &self,
+                            algorithm: &str,
+                            account: &str,
+                            start_date: &str,
+                            end_date: &str,
+                            accounts: &[Account],
+                            progress_callback: Option<&mut dyn FnMut(f64)>,
+                        ) -> Result<BacktestResult, String>;
+                    }
+
+                    // DI Container struct to hold all services
+                    pub struct ServiceContainer {
+                        pub backtest_service: Arc<dyn BacktestService>,
+                        // Add other services here as needed
+                    }
+
+                    impl ServiceContainer {
+                        pub fn new() -> Self {
+                            ServiceContainer {
+                                backtest_service: Arc::new(BacktestEngine),
+                                // Initialize other services here
+                            }
+                        }
+
+                        // Optionally, provide accessors for services
+                        pub fn backtest_service(&self) -> Arc<dyn BacktestService> {
+                            Arc::clone(&self.backtest_service)
+                        }
+                    }
+
+
+                    // When initializing your app:
+                    let services = Arc::new(ServiceContainer::new());
+                    let app_context = AppContext {
+                        services: Arc::clone(&services),
+                        // ... initialize other fields
+                    };
+
+                    // Usage:
+                    // app_context.services.backtest_service().run_backtest(...);
                     fn get_backtest_service() -> &'static BacktestEngine {
                         static INSTANCE: BacktestEngine = BacktestEngine;
                         &INSTANCE
