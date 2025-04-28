@@ -42,7 +42,7 @@ cargo run
 - **Market Data Integration**: Fetches historical market data from APIs like Yahoo Finance, and supports option chain data and SEC filings.
 - **IBKR Integration**: Establishes a live connection with Interactive Brokers to fetch real-time market data, place orders, and subscribe to Depth of Market (DOM) and Time & Sales (T&S) data.
 - **Alert System**: Set up technical or price-based alerts that trigger user-defined callbacks.
-- **Backtesting Engine**: Implements a backtesting system where users can test their algorithms on historical market data using strategies like Simple Moving Average (SMA).
+- **Backtesting Engine**: Implements a backtesting system where users can test their algorithms on historical market data using strategies.
 - **Real-Time Charting**: Displays real-time candlestick charts for selected symbols.
 - **RBAC (Role-Based Access Control)**: The application includes role-based access control, where users can have different permissions based on their roles (Admin, Trader, ReadOnly, Analyst). Administrators have full access, while traders can manage positions, bots, and run backtests.
 - **Trading Account Management**: Add or remove trading accounts and manage different strategies within each account.
