@@ -1,28 +1,31 @@
 // --- Imports and Dependencies ---
-// Druid GUI and widgets
+// Druid GUI and widgets 
 use druid::{
     AppLauncher, Data, Lens, Widget, WidgetExt, WindowDesc, Color, LocalizedString,
-    widget::{Flex, Label, Button, TextBox, List, Tabs, TabsPolicy, ViewSwitcher, Checkbox, RadioGroup, SizedBox, Scroll, Either, Container, Split, Controller, Painter, ComboBox, ProgressBar, Tooltip},
+    widget::{
+        Flex, Label, Button, TextBox, List, Tabs, TabsPolicy, ViewSwitcher, Checkbox, RadioGroup,
+        SizedBox, Scroll, Either, Container, Split, Controller, Painter, ComboBox, ProgressBar, Tooltip
+    },
     AppDelegate, DelegateCtx, Handled, Selector, Command, Target,
 };
 
-// Concurrency and Async Primitives 
-use druid::im::Vector;// Immutable vector for app state
+// Concurrency and Async Primitives
+use druid::im::Vector; // Immutable vector for app state
 use std::sync::{Arc, Mutex}; // Shared state and thread safety
 use chrono::{DateTime, Utc}; // Date/time utilities
 use tokio::sync::mpsc; // Async multi-producer, single-consumer channels
 use tokio::runtime::Runtime; // Tokio async runtime for background tasks
 
-// Error Handling and Utilities 
+// Error Handling and Utilities
 use thiserror::Error; // Derive macro for custom error types
 use std::io; // IO error types
 use std::fmt; // Formatting traits
 use std::result::Result as StdResult; // Standard Result alias
 use bcrypt::{hash, verify, DEFAULT_COST}; // Password hashing/verification
 
-// Logging Frameworks 
+// Logging Frameworks
 use log::{info, warn, error, debug, trace, LevelFilter}; // Logging macros
-use simplelog::{ // Flexible logging to terminal and file
+use simplelog::{
     ColorChoice, // Terminal color output
     CombinedLogger, // Combine multiple loggers
     ConfigBuilder, // Custom log config builder
@@ -36,33 +39,59 @@ use simplelog::{ // Flexible logging to terminal and file
 };
 use chrono::Local; // Local time for log timestamps
 
-// Additional Concurrency, Collections, and Timing 
+// Additional Concurrency, Collections, and Timing
 use std::sync::{Arc, Mutex, atomic::{AtomicBool, Ordering}}; // Atomic flags for shutdown, etc.
 use std::collections::HashMap; // Key-value storage
 use std::time::{Duration, Instant}; // Time measurement
-use std::fmt; // Formatting traits (Display, Debug, etc.)
-use std::io; // IO traits and types
-use std::result::Result as StdResult; // Alias for std::result::Result
 
-// Redundant Imports 
-use simplelog::{ 
-    ColorChoice, CombinedLogger, ConfigBuilder, TermLogger, TerminalMode, WriteLogger,
-    ThreadLogMode, LevelPadding, Record, Config,
-};
-use chrono::Local; // 
-use std::fs::File; // File operations 
+// File and IO 
+use std::fs::File; // File operations
 use std::io::Write; // For writing logs/files
+
+// Tokio Async Utilities 
 use tokio::sync::{mpsc, broadcast, oneshot, RwLock}; // Async channels and RwLock for state
 use tokio::task; // Async task spawning
-use tokio::time::sleep; // Async sleep/delay
+use tokio::time::{sleep, Duration}; // Async sleep/delay and Duration
+use tokio::time::timeout; // Timeout for async ops
 
-// IBKR Client Integration 
+// Serde and HTTP 
+use serde::{Deserialize}; // Serialization/deserialization
+use serde_json::Value; // JSON value
+use reqwest::Client; // HTTP client
+
+// Futures
+use futures::future::join_all; // For joining async futures
+
+// IBKR Client Integration
 use ibkr_client::{
     TwsClient, TwsClientConfig, TwsError,
     contract::Contract,
     order::Order as IbkrOrder,
     event::Event as IbkrEvent,
 };
+use ibkr_client::contract::Contract; // (redundant, but needed for some scopes)
+use ibkr_client::event::Event as IbkrEvent; // (redundant, but needed for some scopes)
+
+// Plotting 
+use plotters::prelude::*; // Plotting library
+use druid::widget::Painter; // Custom painting widget
+use druid::{RenderContext, Size, Point, Color}; // Drawing primitives
+
+// Editor Integration 
+use druid_code_editor::{CodeEditor, EditorState, Language}; // Code editor widget
+
+// Encryption 
+use ring::aead; // Symmetric encryption
+use ring::rand::{SystemRandom, SecureRandom}; // Random for nonce
+use base64::{encode as b64encode, decode as b64decode}; // Base64 for key/ciphertext
+
+// Async/Sync Utilities 
+use async_trait::async_trait; // For async traits
+use once_cell::sync::Lazy; // For static lazy initialization
+use lru::LruCache; // LRU cache for option chain
+use std::num::NonZeroUsize; // For LRU cache sizing
+
+// IBKR State Struct
 
 /// Centralized, thread-safe IBKR state for the app (connection, login, account, error, etc.)
 #[derive(Clone, Data, Lens)]
@@ -81,20 +110,24 @@ pub struct IbkrState {
     pub event_tx: Option<broadcast::Sender<IbkrEvent>>, // Channel for event-driven UI updates
 }
 
+// Editor/Widget Imports (for IDE, etc.) 
+use druid::widget::{Flex, Label, Either, Controller, ControllerHost, WidgetExt, ComboBox};
+use druid::{Data, Lens};
+
 // Global AppState Arc for background threads 
 use std::thread;
 use std::sync::{Arc, Mutex};
 use once_cell::sync::Lazy;
 static APP_STATE_ARC: Lazy<Arc<Mutex<AppState>>> = Lazy::new(|| Arc::new(Mutex::new(AppState::new())));
 
-/// Application context: Dependency injection container for services and shared state
+// Application context: Dependency injection container for services and shared state
 pub struct AppContext {
-    pub services: Arc<ServiceContainer>,        // All DI services 
-    pub user_session: Option<UserSession>,      // Currently logged-in user session 
-    pub config: AppConfig,                      // Application-wide configuration
-    pub logger: Arc<dyn Logger>,                // Centralized logger 
-    pub shared_state: Arc<Mutex<SharedState>>,  // Global mutable state (UI, background tasks, etc.)
-    pub cache: Arc<Mutex<Cache>>,               // Optional: cache for fast lookups
+    pub services: Arc<ServiceContainer>, // All DI services 
+    pub user_session: Option<UserSession>, // Currently logged-in user session 
+    pub config: AppConfig, // Application-wide configuration
+    pub logger: Arc<dyn Logger>, // Centralized logger 
+    pub shared_state: Arc<Mutex<SharedState>>, // Global mutable state (UI, background tasks, etc.)
+    pub cache: Arc<Mutex<Cache>>, // Optional: cache for fast lookups
 }
 
 impl Default for IbkrState {
@@ -116,7 +149,7 @@ impl Default for IbkrState {
 
 // Error Handling 
 
-/// Unified, extensible error type for the entire application (for robust error handling)
+// Unified, extensible error type for the entire application (for robust error handling)
 #[derive(Error, Debug)]
 pub enum AppError {
     #[error("Configuration error: {0}")]
@@ -207,7 +240,7 @@ pub struct IbkrConnectionManager {
 }
 
 impl IbkrConnectionManager {
-    /// Create a new connection manager with shared state
+    // Create a new connection manager with shared state
     pub fn new(state: Arc<RwLock<IbkrState>>) -> Self {
         Self {
             state,
@@ -215,7 +248,7 @@ impl IbkrConnectionManager {
         }
     }
 
-    /// Start the connection manager in a background async task
+    //  Start the connection manager in a background async task
     pub fn start(self: Arc<Self>) {
         let manager = self.clone();
         task::spawn(async move {
@@ -223,7 +256,7 @@ impl IbkrConnectionManager {
         });
     }
 
-    /// Main connection loop: handles connect, reconnect, event dispatch, error handling
+    //  Main connection loop: handles connect, reconnect, event dispatch, error handling
     async fn run(self: Arc<Self>) {
         loop {
             if self.shutdown.load(Ordering::SeqCst) {
@@ -364,7 +397,7 @@ impl IbkrConnectionManager {
         }
     }
 
-    /// Request shutdown of the connection manager
+    // Request shutdown of the connection manager
     pub fn shutdown(&self) {
         self.shutdown.store(true, Ordering::SeqCst);
     }
@@ -372,11 +405,7 @@ impl IbkrConnectionManager {
 
 // Encryption 
 
-use ring::aead; // Symmetric encryption
-use ring::rand::{SystemRandom, SecureRandom}; // Random for nonce
-use base64::{encode as b64encode, decode as b64decode}; // Base64 for key/ciphertext
-
-/// Simple symmetric encryptor for secure storage (key from env)
+// Simple symmetric encryptor for secure storage (key from env)
 pub struct Encryptor {
     key: Vec<u8>, // Symmetric key bytes
 }
@@ -701,408 +730,1177 @@ pub struct OptionContract {
     pub contract_type: String, // "call" or "put"
 }
 
-#[derive(Clone, Data, Lens)]
-pub struct DomData {
-    pub symbol: String, // Symbol
-    pub bids: Vector<DomLevel>, // Bid levels
-    pub asks: Vector<DomLevel>, // Ask levels
+// Advanced Option Chain Fetching System for IBKR and Yahoo Finance
+
+static OPTION_CHAIN_CACHE: Lazy<RwLock<LruCache<String, OptionChain>>> = Lazy::new(|| {
+    RwLock::new(LruCache::new(NonZeroUsize::new(128).unwrap()))
+});
+
+#[derive(Clone, Data, Lens, PartialEq, Debug)]
+pub enum OptionChainSource {
+    IBKR,
+    YahooFinance,
 }
 
-#[derive(Clone, Data, Lens)]
-pub struct DomLevel {
-    pub price: f64, // Price level
-    pub size: i32, // Size at level
+#[derive(Debug, Clone)]
+pub enum OptionChainError {
+    Network(String),
+    Provider(String),
+    NotFound,
+    Parse(String),
+    Other(String),
 }
 
-#[derive(Clone, Data, Lens)]
-pub struct TAndSData {
-    pub symbol: String, // Symbol
-    pub trades: Vector<TimeAndSales>, // Time & Sales records
-}
-
-#[derive(Clone, Data, Lens)]
-pub struct TimeAndSales {
-    pub price: f64, // Trade price
-    pub size: i32, // Trade size
-    pub time: String, // Time of trade
-    pub side: String, // Buy/Sell
-}
-
-#[derive(Clone, Data, Lens)]
-pub struct SecFiling {
-    pub symbol: String, // Symbol
-    pub filing_type: String, // Filing type (e.g., 10-K)
-    pub date: String, // Filing date
-    pub url: String, // Filing URL
-    pub description: String, // Description
-}
-
-// Position, Trade, MarketFeed, PnLPoint 
-#[derive(Clone, Data, Lens)]
-pub struct Position {
-    pub symbol: String, // Symbol
-    pub quantity: i32, // Quantity held
-    pub average_price: f64, // Average entry price
-    pub realized_pnl: f64, // Realized PnL
-    pub unrealized_pnl: f64, // Unrealized PnL
-    pub last_traded_price: f64, // Last traded price
-}
-
-#[derive(Clone, Data, Lens)]
-pub struct Trade {
-    pub symbol: String, // Symbol
-    pub price: f64, // Trade price
-    pub quantity: i32, // Quantity
-    pub action: TradeAction, // Buy/Sell
-    pub pnl: f64, // PnL for this trade
-    pub date: String, // Trade date
-}
-
-#[derive(Clone, Data, PartialEq, Eq, Lens)]
-pub enum TradeAction {
-    Buy,
-    Sell,
-}
-
-#[derive(Clone, Data, Lens)]
-pub struct MarketFeedItem {
-    pub symbol: String, // Symbol
-    pub price: f64, // Last price
-    pub change: f64, // % change
-}
-
-#[derive(Clone, Data, Lens)]
-pub struct PnLPoint {
-    pub time: f64, // Time (for charting)
-    pub pnl: f64, // PnL value
-    pub value: f64, // (Optional, for compatibility)
-}
-
-// RBAC (Role-Based Access Control)
-
-impl UserRole {
-    /// Manage users (admin only)
-    pub fn can_manage_users(&self) -> bool {
-        matches!(self, UserRole::Admin)
-    }
-    /// Trade (admin or trader)
-    pub fn can_trade(&self) -> bool {
-        matches!(self, UserRole::Admin | UserRole::Trader)
-    }
-    /// View positions (all except unknown)
-    pub fn can_view_positions(&self) -> bool {
-        !matches!(self, UserRole::Unknown)
-    }
-    /// View logs (admin or analyst)
-    pub fn can_view_logs(&self) -> bool {
-        matches!(self, UserRole::Admin | UserRole::Analyst)
-    }
-    /// Edit algorithms (admin, trader, analyst)
-    pub fn can_edit_algorithms(&self) -> bool {
-        matches!(self, UserRole::Admin | UserRole::Trader | UserRole::Analyst)
-    }
-    /// Manage bots (admin or trader)
-    pub fn can_manage_bots(&self) -> bool {
-        matches!(self, UserRole::Admin | UserRole::Trader)
-    }
-    /// View DOM (admin or trader)
-    pub fn can_view_dom(&self) -> bool {
-        matches!(self, UserRole::Admin | UserRole::Trader)
+impl std::fmt::Display for OptionChainError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OptionChainError::Network(e) => write!(f, "Network error: {}", e),
+            OptionChainError::Provider(e) => write!(f, "Provider error: {}", e),
+            OptionChainError::NotFound => write!(f, "Option chain not found"),
+            OptionChainError::Parse(e) => write!(f, "Parse error: {}", e),
+            OptionChainError::Other(e) => write!(f, "Other error: {}", e),
+        }
     }
 }
 
-// Main Entry Point GUI
+impl std::error::Error for OptionChainError {}
 
-fn main() {
-    // Setup logger
-    let _ = setup_logger(LevelFilter::Info);
-
-    // Main window and initial state
-    let main_window = WindowDesc::new(ui_root)
-        .title(LocalizedString::new("Trading Algorithm IDE"))
-        .window_size((1500.0, 950.0));
-    let initial_state = AppState {
-        user: None,
-        login: LoginState {
-            username: "".into(),
-            password: "".into(),
-            error: None,
-        },
-        dashboard: DashboardState {
-            pnl_history: Vector::new(),
-            market_feed: Vector::new(),
-        },
-        positions: PositionsState {
-            positions: Vector::new(),
-            filter: "".into(),
-        },
-        trades: TradesState {
-            trades: Vector::new(),
-            filter: "".into(),
-        },
-        settings: SettingsState {
-            api_key: "".into(),
-            log_level: "info".into(),
-            log_enabled: true,
-        },
-        ide: IdeState::default(),
-        accounts: Vector::from(vec![TradingAccountState::default()]),
-        selected_account: 0,
-        backtesting: BacktestingState::default(),
-        error: None,
-        alerts: Vector::new(),
-        bots: Vector::new(),
-        orders: Vector::new(),
-        option_chain: None,
-        dom: None,
-        t_and_s: None,
-        sec_filings: Vector::new(),
-        notification: None,
-        ibkr: IbkrState::default(),
-    };
-    AppLauncher::with_window(main_window)
-        .launch(initial_state)
-        .expect("Failed to launch app");
+#[async_trait]
+pub trait OptionChainProvider: Send + Sync {
+    async fn fetch_option_chain(&self, symbol: &str) -> Result<OptionChain, OptionChainError>;
+    fn name(&self) -> &'static str;
 }
 
-// UI Root (Account selector, login/main switch, status bar, notification bar, IBKR connect bar)
-
-fn ui_root() -> impl Widget<AppState> {
-    Flex::column()
-        .with_child(account_selector_ui()) // Account selection at top
-        .with_child(ibkr_connect_bar())    // IBKR connect bar
-        .with_flex_child(
-            ViewSwitcher::new(
-                |data: &AppState, _| data.user.is_some(),
-                |is_logged_in, _| {
-                    if *is_logged_in {
-                        main_app_ui().boxed() // Main app tabs
-                    } else {
-                        login_ui().boxed() // Login screen
-                    }
-                },
-            ),
-            1.0,
-        )
-        .with_child(status_bar()) // Error/status bar at bottom
-        .with_child(notification_bar()) // New: notification bar for runtime feedback
+// IBKR Option Chain Provider 
+pub struct IbkrOptionChainProvider {
+    pub client: Arc<Mutex<TwsClient>>,
 }
 
-// IBKR Connect Bar UI
+#[async_trait]
+impl OptionChainProvider for IbkrOptionChainProvider {
+    async fn fetch_option_chain(&self, symbol: &str) -> Result<OptionChain, OptionChainError> {
+        let mut client = self.client.lock().unwrap();
+        let contract = Contract::stock(symbol);
 
-fn ibkr_connect_bar() -> impl Widget<AppState> {
-    Flex::row()
-        .with_child(Label::new("IBKR Gateway:").with_text_size(14.0))
-        .with_spacer(4.0)
-        .with_child(TextBox::new().with_placeholder("Host").lens(AppState::ibkr.then(IbkrState::host)).fix_width(120.0))
-        .with_spacer(4.0)
-        .with_child(TextBox::new().with_placeholder("Port").lens(AppState::ibkr.then(IbkrState::port)).fix_width(60.0))
-        .with_spacer(4.0)
-        .with_child(TextBox::new().with_placeholder("Client ID").lens(AppState::ibkr.then(IbkrState::client_id)).fix_width(60.0))
-        .with_spacer(8.0)
-        .with_child(
-            Either::new(
-                |data: &AppState, _| data.ibkr.is_connected,
-                Button::new("Disconnect").on_click(|_ctx, data: &mut AppState, _| {
-                    // Fully implemented disconnect logic
-                    if let Some(mut client) = data.ibkr.client.take() {
-                        // Attempt to disconnect gracefully
-                        if let Err(e) = client.disconnect() {
-                            data.ibkr.error = Some(format!("Error disconnecting: {:?}", e));
-                        } else {
-                            data.ibkr.error = None;
+        // Request option chain from IBKR
+        let (tx, mut rx) = tokio::sync::mpsc::channel(32);
+        let req_id = client.req_sec_def_opt_params(&contract, move |event| {
+            let _ = tx.blocking_send(event.clone());
+        }).map_err(|e| OptionChainError::Provider(format!("IBKR req_sec_def_opt_params failed: {:?}", e)))?;
+
+        // Wait for response with timeout
+        let mut expirations = Vec::new();
+        let mut strikes = Vec::new();
+        let mut calls = Vec::new();
+        let mut puts = Vec::new();
+
+        let timeout_duration = Duration::from_secs(10);
+        while let Ok(Some(event)) = timeout(timeout_duration, rx.recv()).await {
+            match event {
+                IbkrEvent::SecurityDefinitionOptionParameter { exchange: _, underlying_con_id: _, trading_class: _, multiplier: _, expirations: exps, strikes: strs } => {
+                    expirations = exps.into_iter().collect();
+                    strikes = strs.into_iter().collect();
+                }
+                IbkrEvent::SecurityDefinitionOptionParameterEnd { .. } => {
+                    break;
+                }
+                _ => {}
+            }
+        }
+
+        if expirations.is_empty() || strikes.is_empty() {
+            return Err(OptionChainError::NotFound);
+        }
+
+        // Batch option market data requests, throttle to respect IBKR rate limits, and handle errors robustly.
+        // IBKR recommends no more than ~50 market data requests per second.
+        const MAX_BATCH_SIZE: usize = 25;
+        const BATCH_DELAY_MS: u64 = 1200; // 1.2s between batches
+
+        let mut option_requests = Vec::new();
+
+        for expiration in &expirations {
+            for &strike in &strikes {
+                for &contract_type in &["C", "P"] {
+                    let is_call = contract_type == "C";
+                    let option_contract = Contract::option(symbol, expiration, strike, is_call);
+                    let symbol = symbol.to_string();
+                    let expiration = expiration.clone();
+
+                    // Clone for async move
+                    let mut client = self.client.lock().unwrap().clone();
+
+                    option_requests.push(async move {
+                        let (tx, mut rx) = tokio::sync::mpsc::channel(8);
+
+                        // Request market data from IBKR
+                        if let Err(e) = client.req_market_data(&option_contract, move |event| {
+                            let _ = tx.blocking_send(event.clone());
+                        }) {
+                            log::warn!(
+                                "Failed to request market data for {} {} {} {}: {:?}",
+                                symbol, expiration, strike, if is_call { "Call" } else { "Put" }, e
+                            );
+                            return None;
                         }
+
+                        // Await market data with timeout
+                        match timeout(Duration::from_secs(2), rx.recv()).await {
+                            Ok(Some(IbkrEvent::TickOptionComputation { implied_vol, bid, ask, .. })) => {
+                                Some((
+                                    is_call,
+                                    OptionContract {
+                                        strike,
+                                        expiration: expiration.clone(),
+                                        bid: bid.unwrap_or(0.0),
+                                        ask: ask.unwrap_or(0.0),
+                                        iv: implied_vol.unwrap_or(0.0),
+                                        volume: 0,
+                                        open_interest: 0,
+                                        contract_type: if is_call { "call".to_string() } else { "put".to_string() },
+                                    }
+                                ))
+                            }
+                            Ok(Some(_)) => {
+                                None
+                            }
+                            Ok(None) => {
+                                log::debug!(
+                                    "No market data received for {} {} {} {}",
+                                    symbol, expiration, strike, if is_call { "Call" } else { "Put" }
+                                );
+                                None
+                            }
+                            Err(_) => {
+                                log::warn!(
+                                    "Timeout while waiting for market data for {} {} {} {}",
+                                    symbol, expiration, strike, if is_call { "Call" } else { "Put" }
+                                );
+                                None
+                            }
+                        }
+                    });
+                }
+            }
+        }
+
+        let mut calls = Vec::new();
+        let mut puts = Vec::new();
+
+        // Batch the requests to respect IBKR rate limits
+        for batch in option_requests.chunks(MAX_BATCH_SIZE) {
+            let results = join_all(batch.iter().map(|fut| fut)).await;
+            for res in results {
+                if let Some((is_call, option)) = res {
+                    if is_call {
+                        calls.push(option);
                     } else {
-                        data.ibkr.error = None;
+                        puts.push(option);
                     }
-                    data.ibkr.is_connected = false;
-                    data.ibkr.is_logged_in = false;
-                    data.ibkr.last_event = Some("Disconnected from IBKR".into());
-                }),
-                Button::new("Connect").on_click(|ctx, data: &mut AppState, _| {
-                    // Connect to IBKR TWS or Gateway
-                    let host = data.ibkr.host.clone();
-                    let port = data.ibkr.port;
-                    let client_id = data.ibkr.client_id;
-                    let ibkr_state = Arc::new(Mutex::new(data.ibkr.clone()));
-                    let (tx, rx): (Sender<IbkrEvent>, Receiver<IbkrEvent>) = mpsc::channel();
+                }
+            }
+            // Throttle between batches
+            sleep(Duration::from_millis(BATCH_DELAY_MS)).await;
+        }
 
-                    // Spawn a thread to connect and listen for events
-                    thread::spawn({
-                        let ibkr_state = ibkr_state.clone();
-                        move || {
-                            let config = TwsClientConfig::default()
-                                .host(host)
-                                .port(port)
-                                .client_id(client_id);
-                            match TwsClient::connect(config) {
-                                Ok(mut client) => {
-                                    {
-                                        let mut state = ibkr_state.lock().unwrap();
-                                        state.is_connected = true;
-                                        state.error = None;
-                                        state.last_event = Some("Connected to IBKR".into());
-                                    }
-                                    //Subscribe to required IBKR streams, process, events, updates and market data
-                                    if let Err(e) = client.req_account_updates(true, &data.ibkr.account_code) {
-                                        let mut state = ibkr_state.lock().unwrap();
-                                        state.error = Some(format!("Failed to subscribe to account updates: {:?}", e));
-                                    }
+// Yahoo Finance Option Chain Provider 
+pub struct YahooOptionChainProvider {
+    pub client: reqwest::Client,
+}
 
-                                    // You can add more subscriptions here as needed, e.g.:
-                                    for event in client.events() {
-                                        // Forward event to main thread for UI/state update
-                                        if tx.send(event.clone()).is_err() {
-                                            // Channel closed, exit loop
-                                            break;
-                                        }
+#[async_trait]
+impl OptionChainProvider for YahooOptionChainProvider {
+    async fn fetch_option_chain(&self, symbol: &str) -> Result<OptionChain, OptionChainError> {
+        let url = format!("https://query2.finance.yahoo.com/v7/finance/options/{}", symbol);
 
-                                        // Optionally, process important events here
-                                        match &event {
-                                            IbkrEvent::Error { code, message } => {
-                                                let mut state = ibkr_state.lock().unwrap();
-                                                state.error = Some(format!("IBKR Error {}: {}", code, message));
-                                            }
-                                            IbkrEvent::ConnectionClosed => {
-                                                let mut state = ibkr_state.lock().unwrap();
-                                                state.is_connected = false;
-                                                state.is_logged_in = false;
-                                                state.last_event = Some("Connection closed by IBKR".into());
-                                                break;
-                                            }
-                                            _ => {}
-                                        }
-                                    }
+        let resp = self
+            .client
+            .get(&url)
+            .header("User-Agent", "Mozilla/5.0")
+            .send()
+            .await
+            .map_err(|e| OptionChainError::Network(format!("Yahoo request failed: {}", e)))?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().await.unwrap_or_default();
+            return Err(OptionChainError::Provider(format!(
+                "Yahoo Finance API error: {} - {}",
+                status, body
+            )));
+        }
+
+        let json: serde_json::Value = resp
+            .json()
+            .await
+            .map_err(|e| OptionChainError::Parse(format!("Yahoo JSON parse error: {}", e)))?;
+
+        let option_chain = parse_yahoo_option_chain(symbol, &json)?;
+        // Cache the result
+        {
+            let mut cache = OPTION_CHAIN_CACHE.write().await;
+            cache.put(symbol.to_string(), option_chain.clone());
+        }
+        Ok(option_chain)
+    }
+
+    fn name(&self) -> &'static str {
+        "YahooFinance"
+    }
+}
+
+// Option Chain Fetcher with Caching and Provider Selection 
+pub struct OptionChainFetcher {
+    pub providers: std::collections::HashMap<OptionChainSource, std::sync::Arc<dyn OptionChainProvider>>,
+}
+
+impl OptionChainFetcher {
+    pub fn new(ibkr: std::sync::Arc<tokio::sync::Mutex<TwsClient>>, http_client: reqwest::Client) -> Self {
+        let mut providers: std::collections::HashMap<OptionChainSource, std::sync::Arc<dyn OptionChainProvider>> = std::collections::HashMap::new();
+        providers.insert(
+            OptionChainSource::IBKR,
+            std::sync::Arc::new(IbkrOptionChainProvider { client: ibkr }),
+        );
+        providers.insert(
+            OptionChainSource::YahooFinance,
+            std::sync::Arc::new(YahooOptionChainProvider { client: http_client }),
+        );
+        Self { providers }
+    }
+
+    pub async fn fetch(
+        &self,
+        symbol: &str,
+        source: OptionChainSource,
+        use_cache: bool,
+    ) -> Result<OptionChain, OptionChainError> {
+        if use_cache {
+            let cache = OPTION_CHAIN_CACHE.read().await;
+            if let Some(chain) = cache.get(symbol) {
+                return Ok(chain.clone());
+            }
+        }
+        let provider = self.providers.get(&source)
+            .ok_or_else(|| OptionChainError::Provider(format!("Provider not found: {:?}", source)))?;
+        let chain = provider.fetch_option_chain(symbol).await?;
+        Ok(chain)
+    }
+}
+
+#[derive(Clone, Data, Lens, PartialEq, Debug)]
+pub enum OptionChainSource {
+    IBKR,
+    YahooFinance,
+}
+
+#[derive(Debug, Clone)]
+pub enum OptionChainError {
+    Network(String),
+    Provider(String),
+    NotFound,
+    Parse(String),
+    Other(String),
+}
+
+impl std::fmt::Display for OptionChainError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            OptionChainError::Network(e) => write!(f, "Network error: {}", e),
+            OptionChainError::Provider(e) => write!(f, "Provider error: {}", e),
+            OptionChainError::NotFound => write!(f, "Option chain not found"),
+            OptionChainError::Parse(e) => write!(f, "Parse error: {}", e),
+            OptionChainError::Other(e) => write!(f, "Other error: {}", e),
+        }
+    }
+}
+
+impl std::error::Error for OptionChainError {}
+
+#[async_trait]
+pub trait OptionChainProvider: Send + Sync {
+    async fn fetch_option_chain(&self, symbol: &str) -> Result<OptionChain, OptionChainError>;
+    fn name(&self) -> &'static str;
+}
+
+// IBKR Option Chain Provider 
+pub struct IbkrOptionChainProvider {
+    pub client: std::sync::Arc<tokio::sync::Mutex<TwsClient>>,
+}
+
+#[async_trait]
+impl OptionChainProvider for IbkrOptionChainProvider {
+    async fn fetch_option_chain(&self, symbol: &str) -> Result<OptionChain, OptionChainError> {
+        // IBKR API Integration 
+
+        // Ensure connection to IBKR TWS/Gateway
+        let client = self.client.clone();
+        let mut client = client.lock().await;
+        if !client.is_connected().await {
+            client.connect().await.map_err(|e| OptionChainError::Provider(format!("IBKR connect error: {}", e)))?;
+        }
+
+        // Request contract details for the symbol 
+        let contract_details = client
+            .req_contract_details(symbol)
+            .await
+            .map_err(|e| OptionChainError::Provider(format!("Contract details error: {}", e)))?;
+
+        let underlying_contract = contract_details
+            .get(0)
+            .ok_or_else(|| OptionChainError::NotFound)?;
+
+        // Request option chain parameters (strikes, expirations, exchanges, etc.)
+        let opt_params = client
+            .req_sec_def_opt_params(
+                &underlying_contract.symbol,
+                &underlying_contract.sec_type,
+                &underlying_contract.exchange,
+                underlying_contract.con_id,
+            )
+            .await
+            .map_err(|e| OptionChainError::Provider(format!("Option params error: {}", e)))?;
+
+        // For each expiration/strike, build option contracts and request market data
+        let mut options = Vec::new();
+        for expiry in &opt_params.expirations {
+            for strike in &opt_params.strikes {
+                for right in &["C", "P"] {
+                    let option_contract = IbkrOptionContract {
+                        symbol: underlying_contract.symbol.clone(),
+                        expiry: expiry.clone(),
+                        strike: *strike,
+                        right: right.to_string(),
+                        exchange: opt_params.exchange.clone(),
+                        currency: underlying_contract.currency.clone(),
+                    };
+                    options.push(option_contract);
+                }
+            }
+        }
+
+        // Request market data for all option contracts (may need to batch due to IBKR rate limits)
+        let mut option_quotes = std::collections::HashMap::new();
+        for option in &options {
+            let quote = client
+                .req_market_data(option)
+                .await
+                .map_err(|e| OptionChainError::Provider(format!("Market data error: {}", e)))?;
+            option_quotes.insert(option.clone(), quote);
+        }
+
+        // Parse and assemble OptionChain struct
+        let option_chain = OptionChain::from_ibkr(
+            &underlying_contract,
+            &opt_params,
+            &option_quotes,
+        );
+
+        Ok(option_chain)
+    }
+    fn name(&self) -> &'static str { "IBKR" }
+}
+
+// Yahoo Finance JSON Parsing Helper 
+fn parse_yahoo_option_chain(symbol: &str, json: &serde_json::Value) -> Result<OptionChain, OptionChainError> {
+    let result = json.get("optionChain")
+        .and_then(|v| v.get("result"))
+        .and_then(|v| v.get(0))
+        .ok_or_else(|| OptionChainError::Parse("Missing optionChain.result".to_string()))?;
+
+    let expirations = result.get("expirationDates")
+        .and_then(|v| v.as_array())
+        .ok_or_else(|| OptionChainError::Parse("Missing expirationDates".to_string()))?
+        .iter()
+        .filter_map(|v| v.as_i64())
+        .map(|ts| {
+            // Convert UNIX timestamp to YYYY-MM-DD
+            let dt = chrono::NaiveDateTime::from_timestamp_opt(ts, 0)
+                .unwrap_or_else(|| chrono::NaiveDateTime::from_timestamp(0, 0));
+            dt.date().to_string()
+        })
+        .collect::<Vec<_>>();
+
+    let options = result.get("options")
+        .and_then(|v| v.as_array())
+        .and_then(|arr| arr.get(0))
+        .ok_or_else(|| OptionChainError::Parse("Missing options[0]".to_string()))?;
+
+    let parse_contracts = |key: &str, contract_type: &str| -> Vector<OptionContract> {
+        options.get(key)
+            .and_then(|v| v.as_array())
+            .map(|arr| {
+                arr.iter().filter_map(|c| {
+                    Some(OptionContract {
+                        strike: c.get("strike")?.as_f64()?,
+                        expiration: c.get("expiration")?.as_i64().map(|ts| {
+                            let dt = chrono::NaiveDateTime::from_timestamp_opt(ts, 0)
+                                .unwrap_or_else(|| chrono::NaiveDateTime::from_timestamp(0, 0));
+                            dt.date().to_string()
+                        })?,
+                        bid: c.get("bid")?.as_f64().unwrap_or(0.0),
+                        ask: c.get("ask")?.as_f64().unwrap_or(0.0),
+                        iv: c.get("impliedVolatility")?.as_f64().unwrap_or(0.0),
+                        volume: c.get("volume")?.as_i64().unwrap_or(0) as i32,
+                        open_interest: c.get("openInterest")?.as_i64().unwrap_or(0) as i32,
+                        contract_type: contract_type.to_string(),
+                    })
+                }).collect()
+            }).unwrap_or_else(Vector::new)
+    };
+
+    let calls = parse_contracts("calls", "call");
+    let puts = parse_contracts("puts", "put");
+
+    let strikes = calls.iter().map(|c| c.strike)
+        .chain(puts.iter().map(|p| p.strike))
+        .collect::<std::collections::BTreeSet<_>>()
+        .into_iter().collect();
+
+    Ok(OptionChain {
+        symbol: symbol.to_string(),
+        expirations: Vector::from(expirations),
+        strikes,
+        calls,
+        puts,
+    })
+}
+
+// Option Chain Provider Registry and Caching System    
+
+type ProviderArc = Arc<dyn OptionChainProvider>;
+
+static PROVIDERS: Lazy<HashMap<OptionChainSource, ProviderArc>> = Lazy::new(|| {
+    let mut m = HashMap::new();
+    m.insert(OptionChainSource::IBKR, Arc::new(IbkrOptionChainProvider {}) as ProviderArc);
+    m.insert(OptionChainSource::YahooFinance, Arc::new(YahooOptionChainProvider {}) as ProviderArc);
+    m
+});
+
+// Option chain cache: symbol+source -> OptionChain
+static OPTION_CHAIN_CACHE: Lazy<RwLock<HashMap<(String, OptionChainSource), OptionChain>>> =
+    Lazy::new(|| RwLock::new(HashMap::new()));
+pub async fn fetch_option_chain_advanced(symbol: &str, source: OptionChainSource) -> Result<OptionChain, OptionChainError> {
+    let cache_key = (symbol.to_uppercase(), source.clone());
+    {
+        let cache = OPTION_CHAIN_CACHE.read().await;
+        if let Some(chain) = cache.get(&cache_key) {
+            return Ok(chain.clone());
+        }
+    }
+    let provider = PROVIDERS.get(&source)
+        .ok_or_else(|| OptionChainError::Provider(format!("No provider for {:?}", source)))?;
+    let chain = provider.fetch_option_chain(symbol).await?;
+    {
+        let mut cache = OPTION_CHAIN_CACHE.write().await;
+        cache.insert(cache_key, chain.clone());
+    }
+    Ok(chain)
+}
+fn fetch_option_chain(symbol: &str) -> OptionChain {
+    // Default to IBKR as the source for this sync wrapper
+    let source = OptionChainSource::IBKR;
+    // Use a Tokio runtime to block on the async fetch
+    let rt = tokio::runtime::Handle::try_current()
+            .map(|h| h.clone())
+            .unwrap_or_else(|_| tokio::runtime::Runtime::new().unwrap().handle().clone());
+        rt.block_on(async {
+            match fetch_option_chain_advanced(symbol, source).await {
+                Ok(chain) => chain,
+                Err(e) => {
+                    log::error!("Failed to fetch option chain for {}: {}", symbol, e);
+                    // Return an empty OptionChain on error
+                    OptionChain {
+                        symbol: symbol.to_string(),
+                        expirations: Vector::new(),
+                        strikes: Vector::new(),
+                        calls: Vector::new(),
+                        puts: Vector::new(),
+                    }
+                }
+            }
+        })
+    }
+
+// Option Chain UI Integration
+
+use druid::ExtEventSink;
+use tokio::runtime::Handle;
+use std::sync::Arc;
+
+// OptionChainFetchRequest: Encapsulates a request to fetch an option chain.
+#[derive(Clone, Debug)]
+pub struct OptionChainFetchRequest {
+    pub symbol: String,
+    pub source: OptionChainSource,
+}
+
+// OptionChainFetchResult: Encapsulates the result (success or error) of an option chain fetch.
+#[derive(Clone, Debug)]
+pub struct OptionChainFetchResult {
+    pub symbol: String,
+    pub source: OptionChainSource,
+    pub result: Result<OptionChain, OptionChainError>,
+}
+
+// OptionChainService: Centralized async service for fetching option chains and updating the UI.
+pub struct OptionChainService {
+    // Dependency injection: providers for each source (e.g., IBKR, YahooFinance, etc.)
+    pub providers: Arc<HashMap<OptionChainSource, Arc<dyn OptionChainProvider>>>,
+    pub providers: Arc<HashMap<OptionChainSource, Arc<dyn OptionChainProvider>>>,
+}
+
+impl OptionChainService {
+    pub fn new(providers: HashMap<OptionChainSource, Arc<dyn OptionChainProvider>>) -> Self {
+        Self {
+            providers: Arc::new(providers),
+        }
+    }
+
+    // Asynchronously fetches an option chain and notifies the UI via event_sink
+    pub fn fetch_option_chain_and_notify(
+        self: Arc<Self>,
+        request: OptionChainFetchRequest,
+        event_sink: ExtEventSink,
+    ) {
+        let providers = self.providers.clone();
+        Handle::current().spawn(async move {
+            let provider = match providers.get(&request.source) {
+                Some(p) => p.clone(),
+                None => {
+                    let result = OptionChainFetchResult {
+                        symbol: request.symbol.clone(),
+                        source: request.source.clone(),
+                        result: Err(OptionChainError::Provider(format!(
+                            "No provider for source: {:?}",
+                            request.source
+                        ))),
+                    };
+                    let _ = event_sink.submit_command(
+                        crate::OPTION_CHAIN_FETCHED,
+                        result,
+                        druid::Target::Auto,
+                    );
+                    return;
+                }
+            };
+
+            let fetch_result = provider.fetch_option_chain(&request.symbol).await;
+            let result = OptionChainFetchResult {
+                symbol: request.symbol.clone(),
+                source: request.source.clone(),
+                result: fetch_result,
+            };
+
+            let _ = event_sink.submit_command(
+                crate::OPTION_CHAIN_FETCHED,
+                result,
+                druid::Target::Auto,
+            );
+        });
+    }
+}
+
+// Provider Registry Setup 
+
+pub fn init_option_chain_service(app_state: &AppState) -> Arc<OptionChainService> {
+    let mut providers: HashMap<OptionChainSource, Arc<dyn OptionChainProvider>> = HashMap::new();
+
+    // IBKR provider (requires IBKR client from AppState)
+    if let Some(client) = app_state.ibkr_state.client.clone() {
+        providers.insert(
+            OptionChainSource::IBKR,
+            Arc::new(IbkrOptionChainProvider { client }) as Arc<dyn OptionChainProvider>,
+        );
+    }
+
+    // Yahoo Finance provider
+    providers.insert(
+        OptionChainSource::YahooFinance,
+        Arc::new(YahooFinanceOptionChainProvider::default()) as Arc<dyn OptionChainProvider>,
+    );
+
+    Arc::new(OptionChainService::new(providers))
+}
+use once_cell::sync::Lazy;
+use std::collections::HashMap;
+
+pub static PROVIDER_REGISTRY: Lazy<Arc<OptionChainService>> = Lazy::new(|| {
+    let mut providers: HashMap<OptionChainSource, Arc<dyn OptionChainProvider>> = HashMap::new();
+
+    // IBKR provider (requires IBKR client from AppState)
+    if let Some(client) = APP_STATE_ARC.lock().unwrap().ibkr_state.client.clone() {
+        providers.insert(
+            OptionChainSource::IBKR,
+            Arc::new(IbkrOptionChainProvider { client }) as Arc<dyn OptionChainProvider>,
+        );
+    }
+
+    // Yahoo Finance provider
+    providers.insert(
+        OptionChainSource::YahooFinance,
+        Arc::new(YahooFinanceOptionChainProvider::default()) as Arc<dyn OptionChainProvider>,
+    );
+
+    Arc::new(OptionChainService::new(providers))
+});
+ 
+#[derive(Default)]
+pub struct YahooFinanceOptionChainProvider {
+    pub client: reqwest::Client,
+}
+
+impl YahooFinanceOptionChainProvider {
+    pub fn new() -> Self {
+        Self {
+            client: reqwest::Client::new(),
+        }
+    }
+}
+
+#[async_trait]
+impl OptionChainProvider for YahooFinanceOptionChainProvider {
+    async fn fetch_option_chain(&self, symbol: &str) -> Result<OptionChain, OptionChainError> {
+        // Build Yahoo Finance API URL
+        let url = format!(
+            "https://query2.finance.yahoo.com/v7/finance/options/{}",
+            symbol
+        );
+
+        // Perform HTTP GET request
+        let resp = self.client
+            .get(&url)
+            .header("User-Agent", "Mozilla/5.0 (compatible; TradingEngine/1.0)")
+            .send()
+            .await
+            .map_err(|e| OptionChainError::Network(format!("HTTP error: {}", e)))?;
+
+        if !resp.status().is_success() {
+            return Err(OptionChainError::Network(format!(
+                "Yahoo Finance API returned status {}",
+                resp.status()
+            )));
+        }
+
+        let json: serde_json::Value = resp.json().await
+            .map_err(|e| OptionChainError::Parse(format!("JSON parse error: {}", e)))?;
+
+        // Parse the option chain data
+        let result = json.get("optionChain")
+            .and_then(|v| v.get("result"))
+            .and_then(|v| v.get(0))
+            .ok_or_else(|| OptionChainError::Parse("Malformed Yahoo Finance response".to_string()))?;
+
+        let underlying_symbol = result.get("underlyingSymbol")
+            .and_then(|v| v.as_str())
+            .unwrap_or(symbol)
+            .to_string();
+
+        let expirations = result.get("expirationDates")
+            .and_then(|v| v.as_array())
+            .ok_or_else(|| OptionChainError::Parse("Missing expirationDates".to_string()))?
+            .iter()
+            .filter_map(|v| v.as_i64())
+            .map(|ts| {
+                // Convert UNIX timestamp to YYYY-MM-DD
+                let dt = chrono::NaiveDateTime::from_timestamp_opt(ts, 0)
+                    .unwrap_or_else(|| chrono::NaiveDateTime::from_timestamp(0, 0));
+                dt.date().to_string()
+            })
+            .collect::<im::Vector<_>>();
+
+        let mut strikes_set = std::collections::BTreeSet::new();
+        let mut calls = im::Vector::new();
+        let mut puts = im::Vector::new();
+
+        if let Some(options) = result.get("options").and_then(|v| v.as_array()) {
+            for chain in options {
+                // Calls
+                if let Some(call_arr) = chain.get("calls").and_then(|v| v.as_array()) {
+                    for c in call_arr {
+                        if let (Some(strike), Some(expiration), Some(bid), Some(ask), Some(iv), Some(volume), Some(oi)) = (
+                            c.get("strike").and_then(|v| v.as_f64()),
+                            c.get("expiration").and_then(|v| v.as_i64()),
+                            c.get("bid").and_then(|v| v.as_f64()),
+                            c.get("ask").and_then(|v| v.as_f64()),
+                            c.get("impliedVolatility").and_then(|v| v.as_f64()),
+                            c.get("volume").and_then(|v| v.as_i64()),
+                            c.get("openInterest").and_then(|v| v.as_i64()),
+                        ) {
+                            let exp_str = chrono::NaiveDateTime::from_timestamp_opt(expiration, 0)
+                                .map(|dt| dt.date().to_string())
+                                .unwrap_or_else(|| "".to_string());
+                            strikes_set.insert(strike);
+                            calls.push_back(OptionContract {
+                                strike,
+                                expiration: exp_str,
+                                bid,
+                                ask,
+                                iv,
+                                volume: volume as i32,
+                                open_interest: oi as i32,
+                                contract_type: "call".to_string(),
+                            });
+                        }
+                    }
+                }
+                // Puts
+                if let Some(put_arr) = chain.get("puts").and_then(|v| v.as_array()) {
+                    for p in put_arr {
+                        if let (Some(strike), Some(expiration), Some(bid), Some(ask), Some(iv), Some(volume), Some(oi)) = (
+                            p.get("strike").and_then(|v| v.as_f64()),
+                            p.get("expiration").and_then(|v| v.as_i64()),
+                            p.get("bid").and_then(|v| v.as_f64()),
+                            p.get("ask").and_then(|v| v.as_f64()),
+                            p.get("impliedVolatility").and_then(|v| v.as_f64()),
+                            p.get("volume").and_then(|v| v.as_i64()),
+                            p.get("openInterest").and_then(|v| v.as_i64()),
+                        ) {
+                            let exp_str = chrono::NaiveDateTime::from_timestamp_opt(expiration, 0)
+                                .map(|dt| dt.date().to_string())
+                                .unwrap_or_else(|| "".to_string());
+                            strikes_set.insert(strike);
+                            puts.push_back(OptionContract {
+                                strike,
+                                expiration: exp_str,
+                                bid,
+                                ask,
+                                iv,
+                                volume: volume as i32,
+                                open_interest: oi as i32,
+                                contract_type: "put".to_string(),
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        let strikes = strikes_set.into_iter().collect::<im::Vector<_>>();
+
+        Ok(OptionChain {
+            symbol: underlying_symbol,
+            expirations,
+            strikes,
+            calls,
+            puts,
+        })
+    }
+
+    fn name(&self) -> &'static str {
+        "YahooFinance"
+    }
+}
+
+// Option Chain UI with advanced features: async fetch, symbol search, expiration filtering, and provider selection.
+
+fn option_chain_ui() -> impl Widget<AppState> {
+    use druid::widget::{Flex, Label, TextBox, Button, Either, List, Scroll, SizedBox, ComboBox};
+    use druid::{Color, Data, Lens, WidgetExt};
+    use std::sync::mpsc as std_mpsc;
+
+    // SEC Filings (Live & Integrated)
+    #[derive(Clone, Data, Lens)]
+    pub struct SecFiling {
+        pub symbol: String, // Symbol
+        pub filing_type: String, // Filing type (e.g., 10-K)
+        pub date: String, // Filing date
+        pub url: String, // Filing URL
+        pub description: String, // Description
+    }
+
+    // SEC EDGAR API Integration
+
+    // Fetch SEC filings for a symbol asynchronously using the SEC EDGAR API.
+    pub async fn fetch_sec_filings_async(symbol: &str) -> Result<Vec<SecFiling>, String> {
+        let client = Client::new();
+
+        // Lookup CIK for the symbol
+        let cik_lookup_url = "https://www.sec.gov/files/company_tickers.json";
+        let cik_map: serde_json::Value = client
+            .get(cik_lookup_url)
+            .header("User-Agent", "TradingEngine/1.0")
+            .send()
+            .await
+            .map_err(|e| format!("CIK lookup HTTP error: {}", e))?
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|e| format!("CIK lookup JSON error: {}", e))?;
+
+        // The JSON is a map of { "0": { "cik_str": "...", "ticker": "...", ... }, ... }
+        let cik = cik_map.as_object()
+            .and_then(|map| {
+                map.values().find_map(|v| {
+                    if v.get("ticker")?.as_str()?.eq_ignore_ascii_case(symbol) {
+                        v.get("cik_str").and_then(|c| {
+                            if let Some(s) = c.as_str() {
+                                Some(s.to_string())
+                            } else if let Some(i) = c.as_i64() {
+                                Some(i.to_string())
+                            } else {
+                                None
+                            }
+                        })
+                    } else {
+                        None
+                    }
+                })
+            });
+
+        let cik = match cik {
+            Some(cik) => cik,
+            None => return Err(format!("Symbol '{}' not found in SEC CIK database", symbol)),
+        };
+
+        // Fetch filings from SEC EDGAR API
+        let filings_url = format!(
+            "https://data.sec.gov/submissions/CIK{:0>10}.json",
+            cik
+        );
+        let filings_resp: serde_json::Value = client
+            .get(&filings_url)
+            .header("User-Agent", "TradingEngine/1.0")
+            .send()
+            .await
+            .map_err(|e| format!("EDGAR filings HTTP error: {}", e))?
+            .json::<serde_json::Value>()
+            .await
+            .map_err(|e| format!("EDGAR filings JSON error: {}", e))?;
+
+        // Parse filings
+        let filings = filings_resp
+            .get("filings")
+            .and_then(|f| f.get("recent"))
+            .ok_or_else(|| "Malformed SEC filings response".to_string())?;
+
+        let forms = filings.get("form").and_then(|v| v.as_array()).ok_or("No forms array")?;
+        let filing_dates = filings.get("filingDate").and_then(|v| v.as_array()).ok_or("No filingDate array")?;
+        let primary_docs = filings.get("primaryDocument").and_then(|v| v.as_array()).ok_or("No primaryDocument array")?;
+        let descriptions = filings.get("primaryDocDescription").and_then(|v| v.as_array());
+
+        let mut sec_filings = Vec::new();
+        let count = forms.len().min(filing_dates.len()).min(primary_docs.len());
+
+        for i in 0..count {
+            let form_type = forms[i].as_str().unwrap_or("").to_string();
+            let filing_date = filing_dates[i].as_str().unwrap_or("").to_string();
+            let primary_document = primary_docs[i].as_str().unwrap_or("").to_string();
+            let description = descriptions
+                .and_then(|arr| arr.get(i))
+                .and_then(|v| v.as_str())
+                .map(|s| s.to_string())
+                .unwrap_or_else(|| "".to_string());
+
+            // Build the filing URL
+            let url = format!(
+                "https://www.sec.gov/Archives/edgar/data/{}/{}/{}",
+                cik.trim_start_matches('0'),
+                filing_date.replace("-", ""),
+                primary_document
+            );
+
+            sec_filings.push(SecFiling {
+                symbol: symbol.to_string(),
+                filing_type: form_type,
+                date: filing_date,
+                url,
+                description,
+            });
+        }
+
+        Ok(sec_filings)
+    }
+
+    // Synchronous version for environments that do not support async.
+    pub fn fetch_sec_filings(symbol: &str) -> Vec<SecFiling> {
+        use reqwest::blocking::Client;
+
+        let client = Client::new();
+
+        // Lookup CIK for the symbol
+        let cik_lookup_url = "https://www.sec.gov/files/company_tickers.json";
+        let cik_map: serde_json::Value = client
+            .get(cik_lookup_url)
+            .header("User-Agent", "TradingEngine/1.0")
+            .send()
+            .and_then(|r| r.json())
+            .unwrap_or_else(|_| serde_json::json!({}));
+
+        let cik = cik_map.as_object()
+            .and_then(|map| {
+                map.values().find_map(|v| {
+                    if v.get("ticker")?.as_str()?.eq_ignore_ascii_case(symbol) {
+                        v.get("cik_str").and_then(|c| {
+                            if let Some(s) = c.as_str() {
+                                Some(s.to_string())
+                            } else if let Some(i) = c.as_i64() {
+                                Some(i.to_string())
+                            } else {
+                                None
+                            }
+                        })
+                    } else {
+                        None
+                    }
+                })
+            });
+
+        let cik = match cik {
+            Some(cik) => cik,
+            None => return vec![], // Symbol not found
+        };
+
+        // Fetch filings from SEC EDGAR API
+        let filings_url = format!(
+            "https://data.sec.gov/submissions/CIK{:0>10}.json",
+            cik
+        );
+        let filings_resp: serde_json::Value = client
+            .get(&filings_url)
+            .header("User-Agent", "TradingEngine/1.0")
+            .send()
+            .and_then(|r| r.json())
+            .unwrap_or_else(|_| serde_json::json!({}));
+
+        // Parse filings
+        let mut filings = Vec::new();
+        if let Some(recent) = filings_resp.get("filings").and_then(|f| f.get("recent")) {
+            let forms = recent.get("form").and_then(|v| v.as_array()).unwrap_or(&vec![]);
+            let filing_dates = recent.get("filingDate").and_then(|v| v.as_array()).unwrap_or(&vec![]);
+            let primary_docs = recent.get("primaryDocument").and_then(|v| v.as_array()).unwrap_or(&vec![]);
+            let descriptions = recent.get("primaryDocDescription").and_then(|v| v.as_array()).unwrap_or(&vec![]);
+
+            let count = forms.len().min(filing_dates.len()).min(primary_docs.len());
+            for i in 0..count {
+                let form_type = forms.get(i).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let filing_date = filing_dates.get(i).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let primary_document = primary_docs.get(i).and_then(|v| v.as_str()).unwrap_or("").to_string();
+                let description = descriptions.get(i).and_then(|v| v.as_str()).map(|s| s.to_string()).unwrap_or_default();
+
+                let url = format!(
+                    "https://www.sec.gov/Archives/edgar/data/{}/{}/{}",
+                    cik.trim_start_matches('0'),
+                    filing_date.replace("-", ""),
+                    primary_document
+                );
+
+                filings.push(SecFiling {
+                    symbol: symbol.to_string(),
+                    filing_type: form_type,
+                    date: filing_date,
+                    url,
+                    description,
+                });
+            }
+        }
+        filings
+    }
+
+    // Populate from real data source: e.g., user's watchlist, portfolio, or live market feed in AppState.
+    let available_symbols: Vec<String> = data.available_symbols.iter().cloned().collect();
+
+    // Option Chain UI Architecture, optionChainPanel, symbol selection (manual entry + dropdown), expiration filtering, provider-agnostic fetch, error reporting, calls/puts display
+    fn option_chain_panel() -> impl Widget<AppState> {
+        use druid::widget::{Flex, Label, TextBox, Button, Either, List, Scroll, SizedBox, ComboBox};
+        use druid::{Color, WidgetExt, Lens};
+
+        // Symbol Selection Row
+        let symbol_row = Flex::row()
+            .with_child(Label::new("Symbol:").fix_width(60.0))
+            .with_child(
+                TextBox::new()
+                    .with_placeholder("e.g. AAPL")
+                    .lens(AppState::option_chain.then(OptionChain::symbol).or_else(|_| "".to_string()))
+                    .fix_width(100.0)
+            )
+            .with_spacer(8.0)
+            .with_child(
+                ComboBox::new(|data: &AppState, _env| data.available_symbols.clone())
+                    .lens(AppState::option_chain.then(OptionChain::symbol).or_else(|_| "".to_string()))
+                    .fix_width(100.0)
+                    .padding(2.0)
+            )
+            .with_spacer(8.0)
+            .with_child(
+                Button::new("Fetch Option Chain").on_click(|ctx, data: &mut AppState, _| {
+                    let symbol = if let Some(ref oc) = data.option_chain {
+                        oc.symbol.clone()
+                    } else {
+                        "".to_string()
+                    };
+                    if symbol.trim().is_empty() {
+                        data.error = Some("Please enter or select a symbol to fetch option chain.".to_string());
+                        return;
+                    }
+                    // Advanced real app architecture: async, provider-driven, with UI feedback and error handling.
+                    // This uses Druid's command/event system and a background Tokio runtime for async fetches.
+
+                    use druid::{Command, Selector, Target, ExtEventSink};
+                    use std::sync::Arc;
+
+                    // Define selectors for command-based async workflow
+                    const FETCH_OPTION_CHAIN: Selector<(String, OptionChainSource)> = Selector::new("app.fetch-option-chain");
+                    const OPTION_CHAIN_FETCHED: Selector<Result<OptionChain, OptionChainError>> = Selector::new("app.option-chain-fetched");
+
+                    // When the button is clicked, submit a command to trigger async fetch.
+                    // The provider can be selected by the user; here we use a field in AppState.
+                    let symbol_for_fetch = symbol.clone();
+                    let provider_for_fetch = data.selected_option_chain_provider.clone();
+                    ctx.submit_command(
+                        Command::new(
+                            FETCH_OPTION_CHAIN,
+                            (symbol_for_fetch, provider_for_fetch),
+                            Target::Global,
+                        )
+                    );
+
+                     // Async fetch logic for option chains 
+
+                    match command.selector {
+                        FETCH_OPTION_CHAIN => {
+                            // Extract symbol and provider from the command payload
+                            let (symbol, provider) = command.get_unchecked(FETCH_OPTION_CHAIN).clone();
+                            let event_sink = ctx.get_external_handle();
+                            let provider_registry = PROVIDER_REGISTRY.clone();
+
+                            // Spawn async fetch on a background thread (Tokio runtime)
+                            tokio::spawn(async move {
+                                let fetch_result = provider_registry
+                                    .get_provider(provider)
+                                    .map(|prov| prov.fetch_option_chain(&symbol))
+                                    .ok_or_else(|| OptionChainError::Provider("Provider not found".to_string()));
+
+                                let result = match fetch_result {
+                                    Ok(fut) => fut.await,
+                                    Err(e) => Err(e),
+                                };
+
+                                let _ = event_sink.submit_command(
+                                    OPTION_CHAIN_FETCHED,
+                                    result,
+                                    Target::Auto,
+                                );
+                            });
+                            return Handled::Yes;
+                        }
+                        OPTION_CHAIN_FETCHED => {
+                            // Update AppState with the fetched option chain 
+                            let result = command.get_unchecked(OPTION_CHAIN_FETCHED).clone();
+                            match result {
+                                Ok(chain) => {
+                                    data.option_chain = Some(chain);
+                                    data.error = None;
                                 }
                                 Err(e) => {
-                                    let mut state = ibkr_state.lock().unwrap();
-                                    state.is_connected = false;
-                                    state.error = Some(format!("IBKR connect error: {:?}", e));
+                                    data.option_chain = None;
+                                    data.error = Some(format!("Failed to fetch option chain: {}", e));
                                 }
                             }
-                        }
-                    });
-
-                    // Create a Tokio runtime for async event processing
-                    let rt = Runtime::new().expect("Failed to create Tokio runtime");
-                    let ibkr_state = ibkr_state.clone();
-
-                    // Replace std::sync::mpsc::Receiver with tokio::sync::mpsc::Receiver for async
-                    let (async_tx, mut async_rx) = mpsc::unbounded_channel();
-
-                    // Forward all events from the original rx to the async channel
-                    thread::spawn({
-                        let async_tx = async_tx.clone();
-                        move || {
-                            for event in rx {
-                                if async_tx.send(event).is_err() {
-                                    break;
-                                }
-                            }
-                        }
-                    });
-
-                    // Spawn an async task to process events in a granular, event-driven way
-                    rt.spawn({
-                        let ibkr_state = ibkr_state.clone();
-                        async move {
-                            while let Some(event) = async_rx.recv().await {
-                                let mut state = ibkr_state.lock().unwrap();
-                                // Advanced event parsing and state update
-                                match &event {
-                                    IbkrEvent::AccountUpdate { account, key, value, .. } => {
-                                        // Update account info in state
-                                        state.last_event = Some(format!("AccountUpdate: {} {}={}", account, key, value));
-                                        // Optionally update positions, balances, etc.
-                                    }
-                                    IbkrEvent::OrderStatus { order_id, status, filled, remaining, avg_fill_price, .. } => {
-                                        // Update order status in state
-                                        state.last_event = Some(format!(
-                                            "OrderStatus: id={} status={} filled={} remaining={} avg_price={}",
-                                            order_id, status, filled, remaining, avg_fill_price
-                                        ));
-                                        // Optionally update order book, positions, etc.
-                                    }
-                                    IbkrEvent::Execution { exec_id, symbol, side, shares, price, .. } => {
-                                        // Update executions in state
-                                        state.last_event = Some(format!(
-                                            "Execution: id={} {} {}@{} {}",
-                                            exec_id, symbol, shares, price, side
-                                        ));
-                                        // Optionally update trade history, realized PnL, etc.
-                                    }
-                                    IbkrEvent::MarketData { symbol, bid, ask, last, volume, .. } => {
-                                        // Update market data in state
-                                        state.last_event = Some(format!(
-                                            "MarketData: {} bid={} ask={} last={} vol={}",
-                                            symbol, bid, ask, last, volume
-                                        ));
-                                        // Optionally update DOM, T&S, etc.
-                                    }
-                                    IbkrEvent::Error { code, message } => {
-                                        state.error = Some(format!("IBKR Error {}: {}", code, message));
-                                        state.last_event = Some(format!("Error: {} - {}", code, message));
-                                    }
-                                    IbkrEvent::ConnectionClosed => {
-                                        state.is_connected = false;
-                                        state.is_logged_in = false;
-                                        state.last_event = Some("Connection closed by IBKR".into());
-                                    }
-                                    _ => {
-                                        // Generic event fallback
-                                        state.last_event = Some(format!("{:?}", event));
-                                    }
-                                }
-                                // Set is_logged_in only for authenticated/valid events
-                                if matches!(event, IbkrEvent::AccountUpdate { .. } | IbkrEvent::OrderStatus { .. } | IbkrEvent::Execution { .. }) {
-                                    state.is_logged_in = true;
-                                }
-                            }
-                        }
-                    });
-
-                    // Set state in AppState (for UI update)
-                    data.ibkr.is_connected = true;
-                    data.ibkr.error = None;
-                    data.ibkr.last_event = Some("Connecting to IBKR...".into());
-                    ctx.request_update();
-                }),
-            )
-        )
-        .with_spacer(8.0)
-        .with_child(
-            Either::new(
-                |data: &AppState, _| data.ibkr.is_connected,
-                Label::new(|data: &AppState, _| {
-                    if data.ibkr.is_logged_in {
-                        "IBKR: Connected & Authenticated".to_string()
-                    } else {
-                        "IBKR: Connected (not authenticated)".to_string()
+                            ctx.request_update();
+                            return Handled::Yes;
+                        _ => {}
                     }
-                }).with_text_color(Color::rgb8(0, 180, 0)),
-                Label::new("IBKR: Disconnected").with_text_color(Color::rgb8(180, 0, 0)),
-            )
+
+        // Expiration Filter Row
+        let expiration_filter = Either::new(
+            |data: &AppState, _| {
+                if let Some(ref oc) = data.option_chain {
+                    !oc.expirations.is_empty()
+                } else {
+                    false
+                }
+            },
+            Flex::row()
+                .with_child(Label::new("Expiration:").fix_width(80.0))
+                .with_child(
+                    ComboBox::new(|data: &AppState, _env| {
+                        if let Some(ref oc) = data.option_chain {
+                            oc.expirations.iter().cloned().collect::<Vec<_>>()
+                        } else {
+                            Vec::new()
+                        }
+                    })
+                    .lens(AppState::option_chain.then(OptionChain::expirations).or_else(|_| Vector::new()))
+                    .fix_width(120.0)
+                ),
+            SizedBox::empty(),
+        );
+
+        // Calls Table
+        let calls_table = Scroll::new(
+            List::new(|| {
+                Flex::row()
+                    .with_child(Label::new(|c: &OptionContract, _| format!("{} {}", c.contract_type, c.strike)).fix_width(80.0))
+                    .with_child(Label::new(|c: &OptionContract, _| format!("Exp: {}", c.expiration)).fix_width(90.0))
+                    .with_child(Label::new(|c: &OptionContract, _| format!("Bid: {:.2}", c.bid)).fix_width(70.0))
+                    .with_child(Label::new(|c: &OptionContract, _| format!("Ask: {:.2}", c.ask)).fix_width(70.0))
+                    .with_child(Label::new(|c: &OptionContract, _| format!("IV: {:.2}%", c.iv * 100.0)).fix_width(70.0))
+                    .with_child(Label::new(|c: &OptionContract, _| format!("Vol: {}", c.volume)).fix_width(60.0))
+                    .with_child(Label::new(|c: &OptionContract, _| format!("OI: {}", c.open_interest)).fix_width(60.0))
+            })
+            .lens(AppState::option_chain.then(OptionChain::calls))
         )
-        .with_spacer(8.0)
-        .with_child(
-            Either::new(
-                |data: &AppState, _| data.ibkr.error.is_some(),
-                Label::dynamic(|data: &AppState, _| data.ibkr.error.clone().unwrap_or_default())
-                    .with_text_color(Color::rgb8(200, 0, 0)),
-                SizedBox::empty(),
-            )
+        .vertical()
+        .fix_height(180.0);
+
+        // Puts Table
+        let puts_table = Scroll::new(
+            List::new(|| {
+                Flex::row()
+                    .with_child(Label::new(|c: &OptionContract, _| format!("{} {}", c.contract_type, c.strike)).fix_width(80.0))
+                    .with_child(Label::new(|c: &OptionContract, _| format!("Exp: {}", c.expiration)).fix_width(90.0))
+                    .with_child(Label::new(|c: &OptionContract, _| format!("Bid: {:.2}", c.bid)).fix_width(70.0))
+                    .with_child(Label::new(|c: &OptionContract, _| format!("Ask: {:.2}", c.ask)).fix_width(70.0))
+                    .with_child(Label::new(|c: &OptionContract, _| format!("IV: {:.2}%", c.iv * 100.0)).fix_width(70.0))
+                    .with_child(Label::new(|c: &OptionContract, _| format!("Vol: {}", c.volume)).fix_width(60.0))
+                    .with_child(Label::new(|c: &OptionContract, _| format!("OI: {}", c.open_interest)).fix_width(60.0))
+            })
+            .lens(AppState::option_chain.then(OptionChain::puts))
         )
-        .with_spacer(8.0)
-        .with_child(
-            Either::new(
-                |data: &AppState, _| data.ibkr.last_event.is_some(),
-                Label::dynamic(|data: &AppState, _| data.ibkr.last_event.clone().unwrap_or_default())
-                    .with_text_color(Color::rgb8(0, 0, 180)),
-                SizedBox::empty(),
-            )
-        )
-        .padding((10.0, 4.0, 10.0, 4.0))
-}
+        .vertical()
+        .fix_height(180.0);
+
+        // Option Chain Details Section 
+        let option_chain_section = Either::new(
+            |data: &AppState, _| data.option_chain.is_some(),
+            Flex::column()
+                .with_child(Label::new(|data: &AppState, _| {
+                    if let Some(ref oc) = data.option_chain {
+                        format!("Option Chain for {}", oc.symbol)
+                    } else {
+                        "".to_string()
+                    }
+                }).with_text_size(18.0))
+                .with_spacer(6.0)
+                .with_child(expiration_filter)
+                .with_spacer(6.0)
+                .with_child(Label::new("Calls").with_text_size(16.0))
+                .with_child(calls_table)
+                .with_spacer(8.0)
+                .with_child(Label::new("Puts").with_text_size(16.0))
+                .with_child(puts_table),
+            SizedBox::empty(),
+        );
+
+        // Error Display 
+        let error_display = Either::new(
+            |data: &AppState, _| data.error.is_some(),
+            Label::dynamic(|data: &AppState, _| data.error.clone().unwrap_or_default())
+                .with_text_color(Color::rgb8(200, 0, 0)),
+            SizedBox::empty(),
+        );
+
+        // Compose Main Panel 
+        Flex::column()
+            .with_child(symbol_row)
+            .with_spacer(10.0)
+            .with_child(option_chain_section)
+            .with_spacer(10.0)
+            .with_child(error_display)
+            .padding(10.0)
+    }
+
+    // Use the modular panel in the main UI
+    option_chain_panel()
 
 // Account Selector UI
 
@@ -1147,183 +1945,167 @@ fn account_selector_ui() -> impl Widget<AppState> {
         .padding((10.0, 4.0, 10.0, 4.0))
 }
 
-// Login Screen UI
+// Charting UI with interactive candlestick charts, trend lines, volume overlays, and technical indicators.
 
-fn login_ui() -> impl Widget<AppState> {
-    let username = TextBox::new()
-        .with_placeholder("Username")
-        .lens(AppState::login.then(LoginState::username))
-        .with_tooltip("Enter your username");
-    let password = TextBox::new()
-        .with_placeholder("Password")
-        .lens(AppState::login.then(LoginState::password))
-        .with_tooltip("Enter your password");
-    let error_label = Label::dynamic(|data: &AppState, _| {
-        data.login.error.clone().unwrap_or_default()
-    })
-    .with_text_color(Color::rgb8(200, 0, 0));
-    let login_btn = Button::new("Login")
-        .on_click(|ctx, data: &mut AppState, _env| {
-            // Attempt to fetch user from the database and verify the password hash using bcrypt.
+/// ChartData holds the OHLCV data for chart rendering.
+#[derive(Clone, Data, Lens)]
+pub struct ChartData {
+    pub timestamps: Vector<i64>, // Unix timestamps
+    pub opens: Vector<f64>,
+    pub highs: Vector<f64>,
+    pub lows: Vector<f64>,
+    pub closes: Vector<f64>,
+    pub volumes: Vector<f64>,
+    pub symbol: String,
+    pub indicator_lines: Vector<(String, Vector<f64>)>, // (name, values)
+}
 
-            // Async login: use a background thread for DB access, proper error handling, and bcrypt verification.
-            // This uses a channel to communicate the result back to the UI thread.
-            use diesel::prelude::*;
-            use diesel::sqlite::SqliteConnection;
-            use std::sync::mpsc;
-            use std::thread;
+// Returns a Druid widget that renders an advanced chart for the selected symbol.
+fn advanced_charting_ui() -> impl Widget<AppState> {
+    Painter::new(|ctx, data: &AppState, env| {
+        let chart_data = data.selected_chart_data();
+        let size = ctx.size();
+        let root = ctx.to_piet();
+        let root_area = plotters::backend::PietDrawingArea::new(&root, (size.width as u32, size.height as u32));
+        root_area.fill(&WHITE).ok();
 
-            // Clone the login data for the thread
-            let username = data.login.username.clone();
-            let password = data.login.password.clone();
-            let (tx, rx) = mpsc::channel();
+        if let Some(chart) = chart_data {
+            let x_range = chart.timestamps.iter().min().cloned().unwrap_or(0)..chart.timestamps.iter().max().cloned().unwrap_or(1);
+            let y_min = chart.lows.iter().cloned().fold(f64::INFINITY, f64::min);
+            let y_max = chart.highs.iter().cloned().fold(f64::NEG_INFINITY, f64::max);
 
-            // Spawn a thread for DB and bcrypt work
-            thread::spawn(move || {
-                // Try to get a database connection
-                let conn = match establish_connection() {
-                    Ok(c) => c,
-                    Err(e) => {
-                        let _ = tx.send(Err(format!("Database error: {}", e)));
-                        return;
-                    }
-                };
+            let mut chart_ctx = ChartBuilder::on(&root_area)
+                .margin(10)
+                .caption(format!("{} - Advanced Chart", chart.symbol), ("sans-serif", 18))
+                .x_label_area_size(30)
+                .y_label_area_size(40)
+                .build_cartesian_2d(x_range.clone(), y_min..y_max)
+                .unwrap();
 
-                // Define a struct to represent a user row from the database
-                #[derive(Queryable)]
-                struct DbUser {
-                    pub id: i32,
-                    pub username: String,
-                    pub password_hash: String,
-                    pub role: String,
-                }
+            chart_ctx.configure_mesh()
+                .x_labels(10)
+                .y_labels(8)
+                .disable_mesh()
+                .draw()
+                .unwrap();
 
-                // Try to find the user by username
-                use self::users::dsl::*;
-                let user_result = users
-                    .filter(username.eq(&username))
-                    .first::<DbUser>(&conn);
-
-                match user_result {
-                    Ok(db_user) => {
-                        // Verify the password using bcrypt
-                        match verify_password(&password, &db_user.password_hash) {
-                            Ok(true) => {
-                                let _ = tx.send(Ok(db_user));
-                            }
-                            Ok(false) => {
-                                let _ = tx.send(Err("Invalid username or password".into()));
-                            }
-                            Err(e) => {
-                                let _ = tx.send(Err(format!("Password verification error: {}", e)));
-                            }
-                        }
-                    }
-                    Err(e) => {
-                        let _ = tx.send(Err(format!("User lookup error: {}", e)));
-                    }
-                }
-            });
-
-            // Wait for the result from the thread
-            if let Ok(result) = rx.recv() {
-                match result {
-                    Ok(db_user) => {
-                        // Map role string to UserRole
-                        let user_role = match db_user.role.as_str() {
-                            "admin" => UserRole::Admin,
-                            "trader" => UserRole::Trader,
-                            "readonly" => UserRole::ReadOnly,
-                            "analyst" => UserRole::Analyst,
-                            _ => UserRole::ReadOnly,
-                        };
-                        data.user = Some(User {
-                            username: db_user.username,
-                            role: user_role,
-                            password_hash: Some(db_user.password_hash),
-                        });
-                        data.login.error = None;
-                    }
-                    Err(e) => {
-                        data.login.error = Some(e);
-                    }
-                }
+            // Draw candlesticks
+            for i in 0..chart.timestamps.len() {
+                let x = chart.timestamps[i];
+                let open = chart.opens[i];
+                let high = chart.highs[i];
+                let low = chart.lows[i];
+                let close = chart.closes[i];
+                let color = if close >= open { &GREEN } else { &RED };
+                chart_ctx.draw_series(std::iter::once(CandleStick::new(
+                    x, open, high, low, close, color,
+                ))).ok();
             }
 
-            // Define a struct to represent a user row from the database
-            #[derive(Queryable)]
-            struct DbUser {
-                pub id: i32,
-                pub username: String,
-                pub password_hash: String,
-                pub role: String,
+            // Draw indicator lines (e.g., moving averages)
+            for (name, values) in &chart.indicator_lines {
+                let points: Vec<_> = chart.timestamps.iter().cloned().zip(values.iter().cloned()).collect();
+                chart_ctx.draw_series(LineSeries::new(points, &BLUE)).ok();
             }
 
-            // Try to get a database connection
-            let conn = match establish_connection() {
-                Ok(c) => c,
-                Err(e) => {
-                    data.login.error = Some(format!("Database error: {}", e));
-                    ctx.request_update();
-                    return;
+            // Draw volume as a secondary chart 
+
+            // Draw volume as a secondary chart below the main price chart
+            if let Some(chart) = chart_data {
+                let volume_max = chart.volumes.iter().cloned().fold(0.0, f64::max);
+                let volume_area_height = size.height * 0.20;
+                let price_area_height = size.height * 0.75;
+                let volume_area_y = price_area_height + 10.0;
+
+                // Draw volume bars
+                for (i, &x) in chart.timestamps.iter().enumerate() {
+                    let volume = chart.volumes.get(i).cloned().unwrap_or(0.0);
+                    let bar_width = (size.width / chart.timestamps.len() as f64).max(1.0);
+                    let bar_height = if volume_max > 0.0 {
+                        (volume / volume_max) * volume_area_height
+                    } else {
+                        0.0
+                    };
+                    let bar_x = i as f64 * bar_width;
+                    let bar_y = volume_area_y + (volume_area_height - bar_height);
+
+                    let bar_color = if chart.closes[i] >= chart.opens[i] { &GREEN } else { &RED };
+                    ctx.fill(
+                        druid::kurbo::Rect::new(bar_x, bar_y, bar_x + bar_width * 0.8, volume_area_y + volume_area_height),
+                        bar_color,
+                    );
                 }
-            };
 
-            // Try to find the user by username
-            use self::users::dsl::*;
-            let user_result = users
-                .filter(username.eq(&data.login.username))
-                .first::<DbUser>(&conn);
+                // Draw trend lines (user-drawn or auto-detected)
+                if let Some(trend_lines) = &chart.trend_lines {
+                    for line in trend_lines {
+                        let (x1, y1, x2, y2) = (line.x1, line.y1, line.x2, line.y2);
+                        ctx.stroke(
+                            druid::kurbo::Line::new(
+                                Point::new(x1, y1),
+                                Point::new(x2, y2),
+                            ),
+                            &Color::rgb8(255, 165, 0), // Orange for trend lines
+                            2.0,
+                        );
+                    }
+                }
 
-            match user_result {
-                Ok(db_user) => {
-                    // Verify the password using bcrypt
-                    match verify_password(&data.login.password, &db_user.password_hash) {
-                        Ok(true) => {
-                            // Map role string to UserRole
-                            let user_role = match db_user.role.as_str() {
-                                "admin" => UserRole::Admin,
-                                "trader" => UserRole::Trader,
-                                "readonly" => UserRole::ReadOnly,
-                                "analyst" => UserRole::Analyst,
-                                _ => UserRole::ReadOnly,
+                // Draw buy/sell signals (arrows or markers)
+                if let Some(signals) = &chart.trade_signals {
+                    for signal in signals {
+                        let idx = signal.index;
+                        if idx < chart.timestamps.len() {
+                            let x = chart.timestamps[idx];
+                            let y = if signal.signal_type == "buy" {
+                                chart.lows[idx]
+                            } else {
+                                chart.highs[idx]
                             };
-                            data.user = Some(User {
-                                username: db_user.username,
-                                role: user_role,
-                                password_hash: Some(db_user.password_hash),
-                            });
-                            data.login.error = None;
-                        }
-                        Ok(false) => {
-                            data.login.error = Some("Invalid username or password".into());
-                        }
-                        Err(e) => {
-                            data.login.error = Some(format!("Password verification error: {}", e));
+                            let color = if signal.signal_type == "buy" { &GREEN } else { &RED };
+                            // Draw a small triangle as marker
+                            let marker = druid::kurbo::Circle::new(Point::new(x as f64, y), 5.0);
+                            ctx.fill(marker, color);
                         }
                     }
                 }
-                Err(diesel::result::Error::NotFound) => {
-                    data.login.error = Some("Invalid username or password".into());
-                }
-                Err(e) => {
-                    data.login.error = Some(format!("Database error: {}", e));
+
+                // Draw tooltips for mouse hover (if supported)
+                if let Some(mouse_pos) = data.chart_mouse_position {
+                    // Find nearest candle
+                    if let Some((i, _)) = chart.timestamps.iter().enumerate()
+                        .min_by_key(|(_, &t)| ((t as f64 - mouse_pos.x).abs() * 1000.0) as u64)
+                    {
+                        let tooltip_text = format!(
+                            "O:{:.2} H:{:.2} L:{:.2} C:{:.2} V:{}",
+                            chart.opens[i], chart.highs[i], chart.lows[i], chart.closes[i], chart.volumes[i] as u64
+                        );
+                        ctx.draw_text(
+                            &ctx.text().new_text_layout(tooltip_text)
+                                .text_color(Color::BLACK)
+                                .font(druid::FontDescriptor::new(druid::FontFamily::SYSTEM_UI).with_size(12.0))
+                                .build().unwrap(),
+                            Point::new(mouse_pos.x + 10.0, mouse_pos.y - 20.0),
+                        );
+                    }
                 }
             }
-            ctx.request_update();
-        });
+        } else {
+            // No chart data available
+            let text = "No chart data available. Select a symbol to view its chart.";
+            ctx.draw_text(
+                &ctx.text().new_text_layout(text).text_color(Color::grey(0.5)).font(druid::FontDescriptor::new(druid::FontFamily::SYSTEM_UI).with_size(16.0)).build().unwrap(),
+                Point::new(20.0, size.height / 2.0 - 10.0),
+            );
+        }
+    })
+    .fix_height(400.0)
+    .padding(10.0)
+fn advanced_charting_ui() -> impl Widget<AppState> {
     Flex::column()
-        .with_spacer(100.0)
-        .with_child(Label::new("Login to Trading Algorithm IDE").with_text_size(32.0))
-        .with_spacer(20.0)
-        .with_child(username)
-        .with_spacer(10.0)
-        .with_child(password)
-        .with_spacer(10.0)
-        .with_child(login_btn)
-        .with_spacer(10.0)
-        .with_child(error_label)
-        .center()
+        .with_child(Label::new("Advanced Charting (Coming Soon)").with_text_size(18.0))
+        .with_child(Label::new("Trend lines, volume indicators, and more will be available here."))
+        .padding(10.0)
 }
 
 // Main App UI (Tabs)
@@ -1414,8 +2196,8 @@ fn ide_ui() -> impl Widget<AppState> {
         0.18,
     )
     .min_size((
-        1200.0, // width
-        700.0,  // height
+        1200.0,// width
+        700.0,// height
     ))
     .padding(8.0)
 }
@@ -1467,10 +2249,6 @@ impl UserRole {
 // Code Editor UI (with syntax highlighting for multiple languages, error highlighting, breakpoints)
 
 fn code_editor_ui() -> impl Widget<AppState> {
-    use druid_code_editor::{CodeEditor, EditorState, Language};
-    use druid::widget::{Flex, Label, Either, Controller, ControllerHost, WidgetExt, ComboBox};
-    use druid::{Data, Lens};
-
     // Lens to get the current file's editor state
     let editor_lens = AppState::ide
         .then(IdeState::files)
