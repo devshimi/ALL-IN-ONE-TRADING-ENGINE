@@ -29,7 +29,7 @@ cargo run
 ## Features Overview
 
 ### Core Features
-- **Custom Exceptions**: Handles critical issues such as configuration errors, authentication failures, and database issues, providing robust error handling throughout the application.
+- **Custom Exceptions**: Handles critical issues such as configuration errors, authentication failures, and database issues, ensuring robust error handling throughout the application.
 - **Logger Setup**: Includes a rotating file logger and console stream handler to ensure detailed logging for all activities, making debugging and tracking easier.
 - **Encryption**: Sensitive data, such as configuration files and user credentials, are securely encrypted using AES-256-GCM encryption.
 - **Configuration and Authentication**: Secure loading and saving of configuration settings. User authentication is performed using bcrypt-hashed passwords for enhanced security.
@@ -37,19 +37,18 @@ cargo run
 - **Positions Management**: Tracks open positions, calculates the average cost, and computes both realized and unrealized PnL for each symbol.
 - **Market Data Integration**: Fetches historical market data from APIs like Yahoo Finance, and supports option chain data and SEC filings.
 - **IBKR Integration**: Establishes a live connection with Interactive Brokers to fetch real-time market data, place orders, and subscribe to Depth of Market (DOM) and Time & Sales (T&S) data.
-- **Alert System**: Set up technical or price-based alerts that trigger user-defined callbacks.
-- **Backtesting Engine**: Implements a backtesting system where users can test their algorithms on historical market data using strategies.
-- **Real-Time Charting**: Displays real-time candlestick charts for selected symbols.
+- **Alert System**: Allows users to set up price-based or technical alerts that trigger user-defined callbacks. Alerts notify users about significant price movements or technical indicator changes.
+- **Backtesting Engine**: Implements a backtesting system where users can test their algorithms on historical market data using simple strategies like the Simple Moving Average (SMA) strategy.
+- **Real-Time Charting**: Displays real-time candlestick charts for selected symbols, updating with live market data.
 - **RBAC (Role-Based Access Control)**: The application includes role-based access control, where users can have different permissions based on their roles (Admin, Trader, ReadOnly, Analyst). Administrators have full access, while traders can manage positions, bots, and run backtests.
-- **Trading Account Management**: Add or remove trading accounts and manage different strategies within each account.
+- **Trading Account Management**: Allows users to add or remove trading accounts and manage different strategies within each account.
 - **IDE (Integrated Development Environment)**: A built-in editor for algorithmic trading strategies with syntax highlighting, breakpoints, and variable watching. You can write, debug, and run algorithms in real-time.
 
-### UI Tabs Overview
-- **Market Dashboard**: A real-time candlestick chart showing live price data for selected symbols.
+## UI Tabs Overview
+- **Market Dashboard**: Displays a real-time candlestick chart showing live price data for selected symbols.
 - **Option Chain**: Displays option chain data, including available strikes, expirations, and bid/ask prices.
 - **SEC Filings**: Retrieves and displays the latest SEC filings for a given symbol.
-- **Alerts**: Create and manage price-based alerts for real-time notifications.
-- **Backtest**: Run a backtest using historical data with simple strategies, such as SMA.
+- **Backtest**: Run a backtest using historical data with strategies like SMA (Simple Moving Average).
 - **DOM & T&S**: Displays Depth of Market and Time & Sales data for symbols, directly integrated with IBKR.
 - **Orders**: Manage and track live orders, including placing, canceling, and updating orders.
 - **Bots**: Manage and configure algorithmic trading bots for automated trading strategies.
